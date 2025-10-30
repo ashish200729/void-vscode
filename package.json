@@ -21,6 +21,8 @@
     "preinstall": "node build/npm/preinstall.js",
     "postinstall": "node build/npm/postinstall.js",
     "compile": "node ./node_modules/gulp/bin/gulp.js compile",
+  "compile-client": "node ./node_modules/gulp/bin/gulp.js compile-client",
+  "compile-fast": "npm run compile-client",
     "watch": "npm-run-all -lp watch-client watch-extensions",
     "watchd": "deemon npm run watch",
     "watch-webd": "deemon npm run watch-web",

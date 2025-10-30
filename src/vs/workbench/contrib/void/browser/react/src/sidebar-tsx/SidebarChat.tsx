@@ -121,32 +121,50 @@ export const IconWarning = ({ size, className = '' }: { size: number, className?
 
 
 export const IconLoading = ({ className = '' }: { className?: string }) => {
-
-	const [loadingText, setLoadingText] = useState('.');
+	const [dotCount, setDotCount] = useState(1);
 
 	useEffect(() => {
-		let intervalId;
-
-		// Function to handle the animation
-		const toggleLoadingText = () => {
-			if (loadingText === '...') {
-				setLoadingText('.');
-			} else {
-				setLoadingText(loadingText + '.');
-			}
-		};
-
-		// Start the animation loop
-		intervalId = setInterval(toggleLoadingText, 300);
-
-		// Cleanup function to clear the interval when component unmounts
+		const intervalId = setInterval(() => {
+			setDotCount((prev) => (prev >= 3 ? 1 : prev + 1));
+		}, 350);
 		return () => clearInterval(intervalId);
-	}, [loadingText, setLoadingText]);
+	}, []);
 
-	return <div className={`${className}`}>{loadingText}</div>;
+	return (
+		<div
+			className={`inline-flex items-center justify-center font-medium text-sm tracking-wider text-gray-500 dark:text-gray-400 transition-all duration-200 ${className}`}
+		>
+			<span className="inline-block animate-pulse">Working{'.'.repeat(dotCount)}</span>
+		</div>
+	);
+};
 
-}
-
+export const CircleSpinner = ({ size = 14, className = '' }: { size?: number, className?: string }) => {
+	return (
+		<svg
+			className={`animate-spin ${className}`}
+			width={size}
+			height={size}
+			viewBox="0 0 24 24"
+			fill="none"
+			xmlns="http://www.w3.org/2000/svg"
+		>
+			<circle
+				className="opacity-25"
+				cx="12"
+				cy="12"
+				r="10"
+				stroke="currentColor"
+				strokeWidth="3"
+			/>
+			<path
+				className="opacity-75"
+				fill="currentColor"
+				d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+			/>
+		</svg>
+	);
+};
 
 
 // SLIDER ONLY:
@@ -760,6 +778,7 @@ export const SelectedFiles = (
 
 type ToolHeaderParams = {
 	icon?: React.ReactNode;
+	iconTooltip?: string;
 	title: React.ReactNode;
 	desc1: React.ReactNode;
 	desc1OnClick?: () => void;
@@ -778,8 +797,9 @@ type ToolHeaderParams = {
 	className?: string;
 }
 
-const ToolHeaderWrapper = ({
+export const ToolHeaderWrapper = ({
 	icon,
+	iconTooltip,
 	title,
 	desc1,
 	desc1OnClick,
@@ -795,110 +815,153 @@ const ToolHeaderWrapper = ({
 	desc2OnClick,
 	isOpen,
 	isRejected,
-	className, // applies to the main content
+	className,
 }: ToolHeaderParams) => {
-
 	const [isOpen_, setIsOpen] = useState(false);
-	const isExpanded = isOpen !== undefined ? isOpen : isOpen_
 
-	const isDropdown = children !== undefined // null ALLOWS dropdown
-	const isClickable = !!(isDropdown || onClick)
+	const isExpanded = isOpen !== undefined ? isOpen : isOpen_;
+	const isDropdown = children !== undefined;
+	const isClickable = !!(isDropdown || onClick);
+	const isDesc1Clickable = !!desc1OnClick;
 
-	const isDesc1Clickable = !!desc1OnClick
+	const desc1HTML = (
+		<span
+			className={`ml-2 text-xs italic truncate text-gray-400 dark:text-gray-500
+				${isDesc1Clickable ? 'cursor-pointer hover:text-gray-300 transition-colors duration-150' : ''}
+			`}
+			onClick={desc1OnClick}
+			{...desc1Info
+				? {
+						'data-tooltip-id': 'void-tooltip',
+						'data-tooltip-content': desc1Info,
+						'data-tooltip-place': 'top',
+						'data-tooltip-delay-show': 1000,
+				  }
+				: {}}
+		>
+			{desc1}
+		</span>
+	);
 
-	const desc1HTML = <span
-		className={`text-void-fg-4 text-xs italic truncate ml-2
-			${isDesc1Clickable ? 'cursor-pointer hover:brightness-125 transition-all duration-150' : ''}
-		`}
-		onClick={desc1OnClick}
-		{...desc1Info ? {
-			'data-tooltip-id': 'void-tooltip',
-			'data-tooltip-content': desc1Info,
-			'data-tooltip-place': 'top',
-			'data-tooltip-delay-show': 1000,
-		} : {}}
-	>{desc1}</span>
+	const showErrorBadge = isError && !icon;
+	const showRejectedBadge = isRejected && !icon;
 
-	return (<div className=''>
-		<div className={`w-full border border-void-border-3 rounded px-2 py-1 bg-void-bg-3 overflow-hidden ${className}`}>
+	const iconTooltipProps = iconTooltip
+		? {
+				'data-tooltip-id': 'void-tooltip',
+				'data-tooltip-content': iconTooltip,
+				'data-tooltip-place': 'top',
+		  }
+		: {};
+
+	return (
+		<div className={`w-full ${className}`}>
 			{/* header */}
-			<div className={`select-none flex items-center min-h-[24px]`}>
-				<div className={`flex items-center w-full gap-x-2 overflow-hidden justify-between ${isRejected ? 'line-through' : ''}`}>
-					{/* left */}
-					<div // container for if desc1 is clickable
-						className='ml-1 flex items-center overflow-hidden'
-					>
-						{/* title eg "> Edited File" */}
-						<div className={`
-							flex items-center min-w-0 overflow-hidden grow
-							${isClickable ? 'cursor-pointer hover:brightness-125 transition-all duration-150' : ''}
-						`}
-							onClick={() => {
-								if (isDropdown) { setIsOpen(v => !v); }
-								if (onClick) { onClick(); }
-							}}
-						>
-							{isDropdown && (<ChevronRight
-								className={`
-								text-void-fg-3 mr-0.5 h-4 w-4 flex-shrink-0 transition-transform duration-100 ease-[cubic-bezier(0.4,0,0.2,1)]
-								${isExpanded ? 'rotate-90' : ''}
-							`}
-							/>)}
-							<span className="text-void-fg-3 flex-shrink-0">{title}</span>
-
-							{!isDesc1Clickable && desc1HTML}
-						</div>
-						{isDesc1Clickable && desc1HTML}
-					</div>
-
-					{/* right */}
-					<div className="flex items-center gap-x-2 flex-shrink-0">
-
-						{info && <CircleEllipsis
-							className='ml-2 text-void-fg-4 opacity-60 flex-shrink-0'
-							size={14}
-							data-tooltip-id='void-tooltip'
-							data-tooltip-content={info}
-							data-tooltip-place='top-end'
-						/>}
-
-						{isError && <AlertTriangle
-							className='text-void-warning opacity-90 flex-shrink-0'
-							size={14}
-							data-tooltip-id='void-tooltip'
-							data-tooltip-content={'Error running tool'}
-							data-tooltip-place='top'
-						/>}
-						{isRejected && <Ban
-							className='text-void-fg-4 opacity-90 flex-shrink-0'
-							size={14}
-							data-tooltip-id='void-tooltip'
-							data-tooltip-content={'Canceled'}
-							data-tooltip-place='top'
-						/>}
-						{desc2 && <span className="text-void-fg-4 text-xs" onClick={desc2OnClick}>
-							{desc2}
-						</span>}
-						{numResults !== undefined && (
-							<span className="text-void-fg-4 text-xs ml-auto mr-1">
-								{`${numResults}${hasNextPage ? '+' : ''} result${numResults !== 1 ? 's' : ''}`}
-							</span>
+			<div
+				className={`flex items-center justify-between select-none
+					${isRejected ? 'line-through opacity-60' : ''}
+				`}
+			>
+				{/* left section */}
+				<div className="flex items-center gap-2 overflow-hidden min-w-0">
+				{/* clickable title section */}
+				<div
+					className={`flex items-center gap-1 min-w-0 overflow-hidden
+						${isClickable ? 'cursor-pointer hover:text-blue-500 dark:hover:text-blue-400 transition-colors duration-150' : ''}
+					`}
+					onClick={() => {
+						if (isDropdown) setIsOpen((v) => !v);
+						if (onClick) onClick();
+					}}
+				>
+						{isDropdown && (
+							<ChevronRight
+								className={`h-4 w-4 text-gray-500 dark:text-gray-400 transition-transform duration-200 ease-in-out ${
+									isExpanded ? 'rotate-90' : ''
+								}`}
+							/>
 						)}
+				{icon && (
+					<span
+						className="flex items-center justify-center text-gray-500 dark:text-gray-400"
+						{...iconTooltipProps}
+					>
+						{icon}
+					</span>
+				)}
+
+					<span className="font-medium text-sm text-gray-800 dark:text-gray-200 truncate">
+						{title}
+					</span>
+
+						{!isDesc1Clickable && desc1HTML}
 					</div>
+
+					{isDesc1Clickable && desc1HTML}
+				</div>
+
+				{/* right section */}
+				<div className="flex items-center gap-2 flex-shrink-0 text-xs text-gray-500 dark:text-gray-400">
+					{info && (
+						<CircleEllipsis
+							className="opacity-70"
+							size={14}
+							data-tooltip-id="void-tooltip"
+							data-tooltip-content={info}
+							data-tooltip-place="top-end"
+						/>
+					)}
+
+					{showErrorBadge && (
+						<AlertTriangle
+							className="text-yellow-500 dark:text-yellow-400"
+							size={14}
+							data-tooltip-id="void-tooltip"
+							data-tooltip-content={'Error running tool'}
+							data-tooltip-place="top"
+						/>
+					)}
+					{showRejectedBadge && (
+						<Ban
+							className="text-gray-400 dark:text-gray-500"
+							size={14}
+							data-tooltip-id="void-tooltip"
+							data-tooltip-content={'Canceled'}
+							data-tooltip-place="top"
+						/>
+					)}
+
+					{desc2 && (
+						<span
+							onClick={desc2OnClick}
+							className="cursor-pointer hover:text-blue-500 dark:hover:text-blue-400 transition-colors"
+						>
+							{desc2}
+						</span>
+					)}
+
+					{numResults !== undefined && (
+						<span className="ml-1 text-gray-400 dark:text-gray-500">
+							{`${numResults}${hasNextPage ? '+' : ''} result${
+								numResults !== 1 ? 's' : ''
+							}`}
+						</span>
+					)}
 				</div>
 			</div>
-			{/* children */}
-			{<div
-				className={`overflow-hidden transition-all duration-200 ease-in-out ${isExpanded ? 'opacity-100 py-1' : 'max-h-0 opacity-0'}
-					text-void-fg-4 rounded-sm overflow-x-auto
-				  `}
-			//    bg-black bg-opacity-10 border border-void-border-4 border-opacity-50
-			>
-				{children}
-			</div>}
+
+	{/* collapsible children */}
+	<div
+		className={`overflow-hidden text-gray-500 dark:text-gray-400 transition-all duration-200 ease-in-out
+			${isExpanded ? 'opacity-100 py-1' : 'opacity-0 max-h-0'}
+		`}
+	>
+		{children}
+	</div>
+
+			{bottomChildren}
 		</div>
-		{bottomChildren}
-	</div>);
+	);
 };
 
 
@@ -911,11 +974,20 @@ const EditTool = ({ toolMessage, threadId, messageIdx, content }: Parameters<Res
 	const title = getTitle(toolMessage)
 
 	const { desc1, desc1Info } = toolNameToDesc(toolMessage.name, toolMessage.params, accessor)
-	const icon = null
+	const statusIconMeta = getToolStatusIconMeta(toolMessage)
 
 	const { rawParams, params, name } = toolMessage
 	const desc1OnClick = () => voidOpenFileFn(params.uri, accessor)
-	const componentParams: ToolHeaderParams = { title, desc1, desc1OnClick, desc1Info, isError, icon, isRejected, }
+	const componentParams: ToolHeaderParams = {
+		title,
+		desc1,
+		desc1OnClick,
+		desc1Info,
+		isError,
+		isRejected,
+		icon: statusIconMeta?.icon,
+		iconTooltip: statusIconMeta?.tooltip,
+	}
 
 
 	const editToolType = toolMessage.name === 'edit_file' ? 'diff' : 'rewrite'
@@ -1381,7 +1453,8 @@ const ReasoningWrapper = ({ isDoneReasoning, isStreaming, children }: { isDoneRe
 	useEffect(() => {
 		if (!isWriting) setIsOpen(false) // if just finished reasoning, close
 	}, [isWriting])
-	return <ToolHeaderWrapper title='Reasoning' desc1={isWriting ? <IconLoading /> : ''} isOpen={isOpen} onClick={() => setIsOpen(v => !v)}>
+	// Don't show loading icon inside reasoning block - the main loading indicator handles this
+	return <ToolHeaderWrapper title='Reasoning' desc1={''} isOpen={isOpen} onClick={() => setIsOpen(v => !v)}>
 		<ToolChildrenWrapper>
 			<div className='!select-text cursor-auto'>
 				{children}
@@ -1398,7 +1471,6 @@ const ReasoningWrapper = ({ isDoneReasoning, isStreaming, children }: { isDoneRe
 const loadingTitleWrapper = (item: React.ReactNode): React.ReactNode => {
 	return <span className='flex items-center flex-nowrap'>
 		{item}
-		<IconLoading className='w-3 text-sm' />
 	</span>
 }
 
@@ -1421,6 +1493,46 @@ const titleOfBuiltinToolName = {
 	'read_lint_errors': { done: `Read lint errors`, proposed: 'Read lint errors', running: loadingTitleWrapper('Reading lint errors') },
 	'search_in_file': { done: 'Searched in file', proposed: 'Search in file', running: loadingTitleWrapper('Searching in file') },
 } as const satisfies Record<BuiltinToolName, { done: any, proposed: any, running: any }>
+
+type ToolStatusIconMeta = {
+	icon: React.ReactNode;
+	tooltip: string;
+}
+
+const TOOL_STATUS_ICON_SIZE = 14
+
+const getToolStatusIconMeta = (toolMessage: Pick<ChatMessage & { role: 'tool' }, 'name' | 'type' | 'mcpServerName'>): ToolStatusIconMeta | null => {
+	switch (toolMessage.type) {
+		case 'running_now':
+			return {
+				icon: <CircleSpinner size={TOOL_STATUS_ICON_SIZE} className='text-void-fg-3 flex-shrink-0' />,
+				tooltip: 'Running...',
+			}
+		case 'tool_request':
+			return {
+				icon: <CirclePlus size={TOOL_STATUS_ICON_SIZE} className='text-void-fg-3 flex-shrink-0' />,
+				tooltip: 'Waiting for approval',
+			}
+		case 'success':
+			return {
+				icon: <Check size={TOOL_STATUS_ICON_SIZE} style={{ color: acceptBorder }} className='flex-shrink-0' />,
+				tooltip: 'Completed',
+			}
+		case 'tool_error':
+		case 'invalid_params':
+			return {
+				icon: <AlertTriangle size={TOOL_STATUS_ICON_SIZE} className='text-void-warning flex-shrink-0' />,
+				tooltip: 'Error running tool',
+			}
+		case 'rejected':
+			return {
+				icon: <X size={TOOL_STATUS_ICON_SIZE} style={{ color: rejectBorder }} className='flex-shrink-0' />,
+				tooltip: 'Canceled',
+			}
+		default:
+			return null
+	}
+}
 
 
 const getTitle = (toolMessage: Pick<ChatMessage & { role: 'tool' }, 'name' | 'type' | 'mcpServerName'>): React.ReactNode => {
@@ -1734,9 +1846,15 @@ const InvalidTool = ({ toolName, message, mcpServerName }: { toolName: ToolName,
 	const accessor = useAccessor()
 	const title = getTitle({ name: toolName, type: 'invalid_params', mcpServerName })
 	const desc1 = 'Invalid parameters'
-	const icon = null
+	const statusIconMeta = getToolStatusIconMeta({ name: toolName, type: 'invalid_params', mcpServerName })
 	const isError = true
-	const componentParams: ToolHeaderParams = { title, desc1, isError, icon }
+	const componentParams: ToolHeaderParams = {
+		title,
+		desc1,
+		isError,
+		icon: statusIconMeta?.icon,
+		iconTooltip: statusIconMeta?.tooltip,
+	}
 
 	componentParams.children = <ToolChildrenWrapper>
 		<CodeChildren className='bg-void-bg-3'>
@@ -1750,9 +1868,15 @@ const CanceledTool = ({ toolName, mcpServerName }: { toolName: ToolName, mcpServ
 	const accessor = useAccessor()
 	const title = getTitle({ name: toolName, type: 'rejected', mcpServerName })
 	const desc1 = ''
-	const icon = null
+	const statusIconMeta = getToolStatusIconMeta({ name: toolName, type: 'rejected', mcpServerName })
 	const isRejected = true
-	const componentParams: ToolHeaderParams = { title, desc1, icon, isRejected }
+	const componentParams: ToolHeaderParams = {
+		title,
+		desc1,
+		isRejected,
+		icon: statusIconMeta?.icon,
+		iconTooltip: statusIconMeta?.tooltip,
+	}
 	return <ToolHeaderWrapper {...componentParams} />
 }
 
@@ -1772,14 +1896,22 @@ const CommandTool = ({ toolMessage, type, threadId }: { threadId: string } & ({
 	const isError = false
 	const title = getTitle(toolMessage)
 	const { desc1, desc1Info } = toolNameToDesc(toolMessage.name, toolMessage.params, accessor)
-	const icon = null
+	const statusIconMeta = getToolStatusIconMeta(toolMessage)
 	const streamState = useChatThreadsStreamState(threadId)
 
 	const divRef = useRef<HTMLDivElement | null>(null)
 
 	const isRejected = toolMessage.type === 'rejected'
 	const { rawParams, params } = toolMessage
-	const componentParams: ToolHeaderParams = { title, desc1, desc1Info, isError, icon, isRejected, }
+	const componentParams: ToolHeaderParams = {
+		title,
+		desc1,
+		desc1Info,
+		isError,
+		isRejected,
+		icon: statusIconMeta?.icon,
+		iconTooltip: statusIconMeta?.tooltip,
+	}
 
 
 	const effect = async () => {
@@ -1867,15 +1999,19 @@ const MCPToolWrapper = ({ toolMessage }: WrapperProps<string>) => {
 
 	const title = getTitle(toolMessage)
 	const desc1 = removeMCPToolNamePrefix(toolMessage.name)
-	const icon = null
-
-
-	if (toolMessage.type === 'running_now') return null // do not show running
+	const statusIconMeta = getToolStatusIconMeta(toolMessage)
 
 	const isError = false
 	const isRejected = toolMessage.type === 'rejected'
 	const { rawParams, params } = toolMessage
-	const componentParams: ToolHeaderParams = { title, desc1, isError, icon, isRejected, }
+	const componentParams: ToolHeaderParams = {
+		title,
+		desc1,
+		isError,
+		isRejected,
+		icon: statusIconMeta?.icon,
+		iconTooltip: statusIconMeta?.tooltip,
+	}
 
 	const paramsStr = JSON.stringify(params, null, 2)
 	componentParams.desc2 = <CopyButton codeStr={paramsStr} toolTipName={`Copy inputs: ${paramsStr}`} />
@@ -1907,6 +2043,9 @@ const MCPToolWrapper = ({ toolMessage }: WrapperProps<string>) => {
 			</CodeChildren>
 		</BottomChildren>
 	}
+	else if (toolMessage.type === 'running_now') {
+		// Show loading state - no additional children needed, icon already shows spinner
+	}
 
 	return <ToolHeaderWrapper {...componentParams} />
 
@@ -1923,15 +2062,22 @@ const builtinToolNameToComponent: { [T in BuiltinToolName]: { resultWrapper: Res
 			const title = getTitle(toolMessage)
 
 			const { desc1, desc1Info } = toolNameToDesc(toolMessage.name, toolMessage.params, accessor);
-			const icon = null
+			const statusIconMeta = getToolStatusIconMeta(toolMessage)
 
 			if (toolMessage.type === 'tool_request') return null // do not show past requests
-			if (toolMessage.type === 'running_now') return null // do not show running
 
 			const isError = false
 			const isRejected = toolMessage.type === 'rejected'
 			const { rawParams, params } = toolMessage
-			const componentParams: ToolHeaderParams = { title, desc1, desc1Info, isError, icon, isRejected, }
+			const componentParams: ToolHeaderParams = {
+				title,
+				desc1,
+				desc1Info,
+				isError,
+				isRejected,
+				icon: statusIconMeta?.icon,
+				iconTooltip: statusIconMeta?.tooltip,
+			}
 
 			let range: [number, number] | undefined = undefined
 			if (toolMessage.params.startLine !== null || toolMessage.params.endLine !== null) {
@@ -1959,6 +2105,9 @@ const builtinToolNameToComponent: { [T in BuiltinToolName]: { resultWrapper: Res
 					</CodeChildren>
 				</BottomChildren>
 			}
+			else if (toolMessage.type === 'running_now') {
+				// Show loading state - no additional children needed, icon already shows spinner
+			}
 
 			return <ToolHeaderWrapper {...componentParams} />
 		},
@@ -1970,15 +2119,22 @@ const builtinToolNameToComponent: { [T in BuiltinToolName]: { resultWrapper: Res
 
 			const title = getTitle(toolMessage)
 			const { desc1, desc1Info } = toolNameToDesc(toolMessage.name, toolMessage.params, accessor)
-			const icon = null
+			const statusIconMeta = getToolStatusIconMeta(toolMessage)
 
 			if (toolMessage.type === 'tool_request') return null // do not show past requests
-			if (toolMessage.type === 'running_now') return null // do not show running
 
 			const isError = false
 			const isRejected = toolMessage.type === 'rejected'
 			const { rawParams, params } = toolMessage
-			const componentParams: ToolHeaderParams = { title, desc1, desc1Info, isError, icon, isRejected, }
+			const componentParams: ToolHeaderParams = {
+				title,
+				desc1,
+				desc1Info,
+				isError,
+				isRejected,
+				icon: statusIconMeta?.icon,
+				iconTooltip: statusIconMeta?.tooltip,
+			}
 
 			if (params.uri) {
 				const rel = getRelative(params.uri, accessor)
@@ -2006,6 +2162,9 @@ const builtinToolNameToComponent: { [T in BuiltinToolName]: { resultWrapper: Res
 					</CodeChildren>
 				</BottomChildren>
 			}
+			else if (toolMessage.type === 'running_now') {
+				// Show loading state - no additional children needed, icon already shows spinner
+			}
 
 			return <ToolHeaderWrapper {...componentParams} />
 
@@ -2018,15 +2177,22 @@ const builtinToolNameToComponent: { [T in BuiltinToolName]: { resultWrapper: Res
 			const explorerService = accessor.get('IExplorerService')
 			const title = getTitle(toolMessage)
 			const { desc1, desc1Info } = toolNameToDesc(toolMessage.name, toolMessage.params, accessor)
-			const icon = null
+			const statusIconMeta = getToolStatusIconMeta(toolMessage)
 
 			if (toolMessage.type === 'tool_request') return null // do not show past requests
-			if (toolMessage.type === 'running_now') return null // do not show running
 
 			const isError = false
 			const isRejected = toolMessage.type === 'rejected'
 			const { rawParams, params } = toolMessage
-			const componentParams: ToolHeaderParams = { title, desc1, desc1Info, isError, icon, isRejected, }
+			const componentParams: ToolHeaderParams = {
+				title,
+				desc1,
+				desc1Info,
+				isError,
+				isRejected,
+				icon: statusIconMeta?.icon,
+				iconTooltip: statusIconMeta?.tooltip,
+			}
 
 			if (params.uri) {
 				const rel = getRelative(params.uri, accessor)
@@ -2061,6 +2227,9 @@ const builtinToolNameToComponent: { [T in BuiltinToolName]: { resultWrapper: Res
 					</CodeChildren>
 				</BottomChildren>
 			}
+			else if (toolMessage.type === 'running_now') {
+				// Show loading state - no additional children needed, icon already shows spinner
+			}
 
 			return <ToolHeaderWrapper {...componentParams} />
 		}
@@ -2073,13 +2242,20 @@ const builtinToolNameToComponent: { [T in BuiltinToolName]: { resultWrapper: Res
 			const isRejected = toolMessage.type === 'rejected'
 			const title = getTitle(toolMessage)
 			const { desc1, desc1Info } = toolNameToDesc(toolMessage.name, toolMessage.params, accessor)
-			const icon = null
+			const statusIconMeta = getToolStatusIconMeta(toolMessage)
 
 			if (toolMessage.type === 'tool_request') return null // do not show past requests
-			if (toolMessage.type === 'running_now') return null // do not show running
 
 			const { rawParams, params } = toolMessage
-			const componentParams: ToolHeaderParams = { title, desc1, desc1Info, isError, icon, isRejected, }
+			const componentParams: ToolHeaderParams = {
+				title,
+				desc1,
+				desc1Info,
+				isError,
+				isRejected,
+				icon: statusIconMeta?.icon,
+				iconTooltip: statusIconMeta?.tooltip,
+			}
 
 			if (params.includePattern) {
 				componentParams.info = `Only search in ${params.includePattern}`
@@ -2110,6 +2286,9 @@ const builtinToolNameToComponent: { [T in BuiltinToolName]: { resultWrapper: Res
 					</CodeChildren>
 				</BottomChildren>
 			}
+			else if (toolMessage.type === 'running_now') {
+				// Show loading state - no additional children needed, icon already shows spinner
+			}
 
 			return <ToolHeaderWrapper {...componentParams} />
 		}
@@ -2122,13 +2301,20 @@ const builtinToolNameToComponent: { [T in BuiltinToolName]: { resultWrapper: Res
 			const isRejected = toolMessage.type === 'rejected'
 			const title = getTitle(toolMessage)
 			const { desc1, desc1Info } = toolNameToDesc(toolMessage.name, toolMessage.params, accessor)
-			const icon = null
+			const statusIconMeta = getToolStatusIconMeta(toolMessage)
 
 			if (toolMessage.type === 'tool_request') return null // do not show past requests
-			if (toolMessage.type === 'running_now') return null // do not show running
 
 			const { rawParams, params } = toolMessage
-			const componentParams: ToolHeaderParams = { title, desc1, desc1Info, isError, icon, isRejected, }
+			const componentParams: ToolHeaderParams = {
+				title,
+				desc1,
+				desc1Info,
+				isError,
+				isRejected,
+				icon: statusIconMeta?.icon,
+				iconTooltip: statusIconMeta?.tooltip,
+			}
 
 			if (params.searchInFolder || params.isRegex) {
 				let info: string[] = []
@@ -2165,6 +2351,9 @@ const builtinToolNameToComponent: { [T in BuiltinToolName]: { resultWrapper: Res
 					</CodeChildren>
 				</BottomChildren>
 			}
+			else if (toolMessage.type === 'running_now') {
+				// Show loading state - no additional children needed, icon already shows spinner
+			}
 			return <ToolHeaderWrapper {...componentParams} />
 		}
 	},
@@ -2177,13 +2366,20 @@ const builtinToolNameToComponent: { [T in BuiltinToolName]: { resultWrapper: Res
 			const isError = false
 			const isRejected = toolMessage.type === 'rejected'
 			const { desc1, desc1Info } = toolNameToDesc(toolMessage.name, toolMessage.params, accessor);
-			const icon = null;
+			const statusIconMeta = getToolStatusIconMeta(toolMessage);
 
 			if (toolMessage.type === 'tool_request') return null // do not show past requests
-			if (toolMessage.type === 'running_now') return null // do not show running
 
 			const { rawParams, params } = toolMessage;
-			const componentParams: ToolHeaderParams = { title, desc1, desc1Info, isError, icon, isRejected };
+			const componentParams: ToolHeaderParams = {
+				title,
+				desc1,
+				desc1Info,
+				isError,
+				isRejected,
+				icon: statusIconMeta?.icon,
+				iconTooltip: statusIconMeta?.tooltip,
+			};
 
 			const infoarr: string[] = []
 			const uriStr = getRelative(params.uri, accessor)
@@ -2211,6 +2407,9 @@ const builtinToolNameToComponent: { [T in BuiltinToolName]: { resultWrapper: Res
 					</CodeChildren>
 				</BottomChildren>
 			}
+			else if (toolMessage.type === 'running_now') {
+				// Show loading state - no additional children needed, icon already shows spinner
+			}
 
 			return <ToolHeaderWrapper {...componentParams} />;
 		}
@@ -2225,15 +2424,22 @@ const builtinToolNameToComponent: { [T in BuiltinToolName]: { resultWrapper: Res
 
 			const { uri } = toolMessage.params ?? {}
 			const { desc1, desc1Info } = toolNameToDesc(toolMessage.name, toolMessage.params, accessor)
-			const icon = null
+			const statusIconMeta = getToolStatusIconMeta(toolMessage)
 
 			if (toolMessage.type === 'tool_request') return null // do not show past requests
-			if (toolMessage.type === 'running_now') return null // do not show running
 
 			const isError = false
 			const isRejected = toolMessage.type === 'rejected'
 			const { rawParams, params } = toolMessage
-			const componentParams: ToolHeaderParams = { title, desc1, desc1Info, isError, icon, isRejected, }
+			const componentParams: ToolHeaderParams = {
+				title,
+				desc1,
+				desc1Info,
+				isError,
+				isRejected,
+				icon: statusIconMeta?.icon,
+				iconTooltip: statusIconMeta?.tooltip,
+			}
 
 			componentParams.info = getRelative(uri, accessor) // full path
 
@@ -2255,6 +2461,9 @@ const builtinToolNameToComponent: { [T in BuiltinToolName]: { resultWrapper: Res
 					</CodeChildren>
 				</BottomChildren>
 			}
+			else if (toolMessage.type === 'running_now') {
+				// Show loading state - no additional children needed, icon already shows spinner
+			}
 
 			return <ToolHeaderWrapper {...componentParams} />
 		},
@@ -2270,11 +2479,19 @@ const builtinToolNameToComponent: { [T in BuiltinToolName]: { resultWrapper: Res
 			const isRejected = toolMessage.type === 'rejected'
 			const title = getTitle(toolMessage)
 			const { desc1, desc1Info } = toolNameToDesc(toolMessage.name, toolMessage.params, accessor)
-			const icon = null
+			const statusIconMeta = getToolStatusIconMeta(toolMessage)
 
 
 			const { rawParams, params } = toolMessage
-			const componentParams: ToolHeaderParams = { title, desc1, desc1Info, isError, icon, isRejected, }
+			const componentParams: ToolHeaderParams = {
+				title,
+				desc1,
+				desc1Info,
+				isError,
+				isRejected,
+				icon: statusIconMeta?.icon,
+				iconTooltip: statusIconMeta?.tooltip,
+			}
 
 			componentParams.info = getRelative(params.uri, accessor) // full path
 
@@ -2313,10 +2530,18 @@ const builtinToolNameToComponent: { [T in BuiltinToolName]: { resultWrapper: Res
 			const isRejected = toolMessage.type === 'rejected'
 			const title = getTitle(toolMessage)
 			const { desc1, desc1Info } = toolNameToDesc(toolMessage.name, toolMessage.params, accessor)
-			const icon = null
+			const statusIconMeta = getToolStatusIconMeta(toolMessage)
 
 			const { rawParams, params } = toolMessage
-			const componentParams: ToolHeaderParams = { title, desc1, desc1Info, isError, icon, isRejected, }
+			const componentParams: ToolHeaderParams = {
+				title,
+				desc1,
+				desc1Info,
+				isError,
+				isRejected,
+				icon: statusIconMeta?.icon,
+				iconTooltip: statusIconMeta?.tooltip,
+			}
 
 			componentParams.info = getRelative(params.uri, accessor) // full path
 
@@ -2379,15 +2604,22 @@ const builtinToolNameToComponent: { [T in BuiltinToolName]: { resultWrapper: Res
 
 			const { desc1, desc1Info } = toolNameToDesc(toolMessage.name, toolMessage.params, accessor)
 			const title = getTitle(toolMessage)
-			const icon = null
+			const statusIconMeta = getToolStatusIconMeta(toolMessage)
 
 			if (toolMessage.type === 'tool_request') return null // do not show past requests
-			if (toolMessage.type === 'running_now') return null // do not show running
 
 			const isError = false
 			const isRejected = toolMessage.type === 'rejected'
 			const { rawParams, params } = toolMessage
-			const componentParams: ToolHeaderParams = { title, desc1, desc1Info, isError, icon, isRejected, }
+			const componentParams: ToolHeaderParams = {
+				title,
+				desc1,
+				desc1Info,
+				isError,
+				isRejected,
+				icon: statusIconMeta?.icon,
+				iconTooltip: statusIconMeta?.tooltip,
+			}
 
 			const relativePath = params.cwd ? getRelative(URI.file(params.cwd), accessor) : ''
 			componentParams.info = relativePath ? `Running in ${relativePath}` : undefined
@@ -2406,6 +2638,9 @@ const builtinToolNameToComponent: { [T in BuiltinToolName]: { resultWrapper: Res
 					</CodeChildren>
 				</BottomChildren>
 			}
+			else if (toolMessage.type === 'running_now') {
+				// Show loading state - no additional children needed, icon already shows spinner
+			}
 
 			return <ToolHeaderWrapper {...componentParams} />
 		},
@@ -2418,33 +2653,43 @@ const builtinToolNameToComponent: { [T in BuiltinToolName]: { resultWrapper: Res
 
 			const { desc1, desc1Info } = toolNameToDesc(toolMessage.name, toolMessage.params, accessor)
 			const title = getTitle(toolMessage)
-			const icon = null
+			const statusIconMeta = getToolStatusIconMeta(toolMessage)
 
 			if (toolMessage.type === 'tool_request') return null // do not show past requests
-			if (toolMessage.type === 'running_now') return null // do not show running
 
 			const isError = false
 			const isRejected = toolMessage.type === 'rejected'
 			const { rawParams, params } = toolMessage
-			const componentParams: ToolHeaderParams = { title, desc1, desc1Info, isError, icon, isRejected, }
-
-			if (toolMessage.type === 'success') {
-				const { persistentTerminalId } = params
-				componentParams.desc1 = persistentTerminalNameOfId(persistentTerminalId)
-				componentParams.onClick = () => terminalToolsService.focusPersistentTerminal(persistentTerminalId)
-			}
-			else if (toolMessage.type === 'tool_error') {
-				const { result } = toolMessage
-				componentParams.bottomChildren = <BottomChildren title='Error'>
-					<CodeChildren>
-						{result}
-					</CodeChildren>
-				</BottomChildren>
+			const componentParams: ToolHeaderParams = {
+				title,
+				desc1,
+				desc1Info,
+				isError,
+				isRejected,
+				icon: statusIconMeta?.icon,
+				iconTooltip: statusIconMeta?.tooltip,
 			}
 
-			return <ToolHeaderWrapper {...componentParams} />
-		},
+		if (toolMessage.type === 'success') {
+			const { persistentTerminalId } = params
+			componentParams.desc1 = persistentTerminalNameOfId(persistentTerminalId)
+			componentParams.onClick = () => terminalToolsService.focusPersistentTerminal(persistentTerminalId)
+		}
+		else if (toolMessage.type === 'tool_error') {
+			const { result } = toolMessage
+			componentParams.bottomChildren = <BottomChildren title='Error'>
+				<CodeChildren>
+					{result}
+				</CodeChildren>
+			</BottomChildren>
+		}
+		else if (toolMessage.type === 'running_now') {
+			// Show loading state - no additional children needed, icon already shows spinner
+		}
+
+		return <ToolHeaderWrapper {...componentParams} />
 	},
+},
 };
 
 
@@ -2546,7 +2791,7 @@ const _ChatBubble = ({ threadId, chatMessage, currCheckpointIdx, isCommitted, me
 
 		if (ToolResultWrapper)
 			return <>
-				<div className={`${isCheckpointGhost ? 'opacity-50' : ''}`}>
+				<div className={`transition-opacity duration-300 ease-in-out ${isCheckpointGhost ? 'opacity-50' : 'opacity-100'}`}>
 					<ToolResultWrapper
 						toolMessage={chatMessage}
 						messageIdx={messageIdx}
@@ -2852,27 +3097,39 @@ const EditToolSoFar = ({ toolCallSoFar, }: { toolCallSoFar: RawToolCallObj }) =>
 	const title = titleOfBuiltinToolName[toolCallSoFar.name].proposed
 
 	const uriDone = toolCallSoFar.doneParams.includes('uri')
-	const desc1 = <span className='flex items-center'>
-		{uriDone ?
-			getBasename(toolCallSoFar.rawParams['uri'] ?? 'unknown')
-			: `Generating`}
-		<IconLoading />
-	</span>
+	const desc1 = uriDone ? getBasename(toolCallSoFar.rawParams['uri'] ?? 'unknown') : 'Generating...'
 
 	const desc1OnClick = () => { uri && voidOpenFileFn(uri, accessor) }
+
+	// Show loading spinner icon like other tools
+	const TOOL_STATUS_ICON_SIZE = 14
+	const icon = <CircleSpinner size={TOOL_STATUS_ICON_SIZE} className='text-void-fg-3 flex-shrink-0' />
+	const iconTooltip = 'Running...'
+
+	// Get the code being generated
+	const code = toolCallSoFar.rawParams.search_replace_blocks ?? toolCallSoFar.rawParams.new_content ?? ''
+
+	// Determine if we have any code to display
+	const hasCode = !!(code && code.length > 0)
 
 	// If URI has not been specified
 	return <ToolHeaderWrapper
 		title={title}
 		desc1={desc1}
 		desc1OnClick={desc1OnClick}
+		icon={icon}
+		iconTooltip={iconTooltip}
+		isOpen={hasCode} // Auto-expand if we have code to show
 	>
-		<EditToolChildren
-			uri={uri}
-			code={toolCallSoFar.rawParams.search_replace_blocks ?? toolCallSoFar.rawParams.new_content ?? ''}
-			type={'rewrite'} // as it streams, show in rewrite format, don't make a diff editor
-		/>
-		<IconLoading />
+		{hasCode ? (
+			<ToolChildrenWrapper className='bg-void-bg-3'>
+				<EditToolChildren
+					uri={uri}
+					code={code}
+					type={'rewrite'} // as it streams, show in rewrite format, don't make a diff editor
+				/>
+			</ToolChildrenWrapper>
+		) : null}
 	</ToolHeaderWrapper>
 
 }
@@ -2907,11 +3164,17 @@ export const SidebarChat = () => {
 	// this is just if it's currently being generated, NOT if it's currently running
 	const toolIsGenerating = toolCallSoFar && !toolCallSoFar.isDone // show loading for slow tools (right now just edit)
 
+	// Detect when AI is processing after tool completion (isRunning but no content yet and no tool generating)
+	const isWaitingForAIResponse = isRunning && !displayContentSoFar && !reasoningSoFar && !toolIsGenerating
+
 	// ----- SIDEBAR CHAT state (local) -----
 
 	// state of current message
 	const initVal = ''
 	const [instructionsAreEmpty, setInstructionsAreEmpty] = useState(!initVal)
+
+	// state to track when waiting for AI to start responding
+	const [waitingForFirstAIMessage, setWaitingForFirstAIMessage] = useState(false)
 
 	const isDisabled = instructionsAreEmpty || !!isFeatureNameDisabled('Chat', settingsState)
 
@@ -2929,6 +3192,8 @@ export const SidebarChat = () => {
 
 		try {
 			await chatThreadsService.addUserMessageAndStreamResponse({ userMessage, threadId })
+			// Set waiting state to true after sending message
+			setWaitingForFirstAIMessage(true)
 		} catch (e) {
 			console.error('Error while sending message in chat:', e)
 		}
@@ -2961,6 +3226,18 @@ export const SidebarChat = () => {
 		})
 
 	}, [chatThreadsState, threadId, textAreaRef, scrollContainerRef, isResolved])
+
+	// Clear waiting state when AI starts responding (first token arrives)
+	useEffect(() => {
+		if (waitingForFirstAIMessage && (displayContentSoFar || reasoningSoFar)) {
+			setWaitingForFirstAIMessage(false)
+		}
+	}, [displayContentSoFar, reasoningSoFar, waitingForFirstAIMessage])
+
+	// Reset waiting state when thread changes
+	useEffect(() => {
+		setWaitingForFirstAIMessage(false)
+	}, [threadId])
 
 
 
@@ -3030,8 +3307,8 @@ export const SidebarChat = () => {
 		{/* Generating tool */}
 		{generatingTool}
 
-		{/* loading indicator */}
-		{isRunning === 'LLM' || isRunning === 'idle' && !toolIsGenerating ? <ProseWrapper>
+		{/* loading indicator - show when waiting for first AI response OR when AI is processing after tool completion */}
+		{(waitingForFirstAIMessage || isWaitingForAIResponse) ? <ProseWrapper>
 			{<IconLoading className='opacity-50 text-sm' />}
 		</ProseWrapper> : null}
 
