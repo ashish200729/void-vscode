@@ -13,6 +13,7 @@ import { VOID_OPEN_SETTINGS_ACTION_ID, VOID_TOGGLE_SETTINGS_ACTION_ID } from '..
 import { modelFilterOfFeatureName, ModelOption } from '../../../../../../../workbench/contrib/void/common/voidSettingsService.js'
 import { WarningBox } from './WarningBox.js'
 import ErrorBoundary from '../sidebar-tsx/ErrorBoundary.js'
+import { getModelCapabilities } from '../../../../../../../workbench/contrib/void/common/modelCapabilities.js'
 
 const optionsEqual = (m1: ModelOption[], m2: ModelOption[]) => {
 	if (m1.length !== m2.length) return false
@@ -33,13 +34,60 @@ const ModelSelectBox = ({ options, featureName, className }: { options: ModelOpt
 		voidSettingsService.setModelSelectionOfFeature(featureName, newOption.selection)
 	}, [voidSettingsService, featureName])
 
+	const getOptionDetail = useCallback((option: ModelOption) => {
+		const { providerName, modelName } = option.selection
+		const overrides = voidSettingsService.state.overridesOfModel
+		const capabilities = getModelCapabilities(providerName, modelName, overrides)
+
+		const details: string[] = []
+		details.push(`Provider: ${providerName}`)
+		details.push(`\nContext Window: ${capabilities.contextWindow.toLocaleString()} tokens`)
+
+		if (capabilities.reservedOutputTokenSpace !== null) {
+			details.push(`Output Space: ${capabilities.reservedOutputTokenSpace.toLocaleString()} tokens`)
+		}
+
+		if (capabilities.reasoningCapabilities) {
+			details.push('\nReasoning: Supported')
+			if (capabilities.reasoningCapabilities.canTurnOffReasoning) {
+				details.push('  • Can toggle reasoning on/off')
+			}
+			if (capabilities.reasoningCapabilities.canIOReasoning) {
+				details.push('  • Outputs reasoning process')
+			}
+		}
+
+		if (capabilities.cost) {
+			details.push(`\nCost (per 1M tokens):`)
+			details.push(`  • Input: $${capabilities.cost.input}`)
+			details.push(`  • Output: $${capabilities.cost.output}`)
+			if (capabilities.cost.cache_read) {
+				details.push(`  • Cache Read: $${capabilities.cost.cache_read}`)
+			}
+			if (capabilities.cost.cache_write) {
+				details.push(`  • Cache Write: $${capabilities.cost.cache_write}`)
+			}
+		}
+
+		if (capabilities.supportsFIM) {
+			details.push('\nFill-in-Middle: Supported')
+		}
+
+		if (capabilities.downloadable) {
+			const size = capabilities.downloadable.sizeGb === 'not-known' ? 'Unknown' : `${capabilities.downloadable.sizeGb}GB`
+			details.push(`\nDownloadable: ${size}`)
+		}
+
+		return details.join('\n')
+	}, [voidSettingsService])
+
 	return <VoidCustomDropdownBox
 		options={options}
 		selectedOption={selectedOption}
 		onChangeOption={onChangeOption}
 		getOptionDisplayName={(option) => option.selection.modelName}
 		getOptionDropdownName={(option) => option.selection.modelName}
-		getOptionDropdownDetail={(option) => option.selection.providerName}
+		getOptionDropdownDetail={getOptionDetail}
 		getOptionsEqual={(a, b) => optionsEqual([a], [b])}
 		className={className}
 		matchInputWidth={false}

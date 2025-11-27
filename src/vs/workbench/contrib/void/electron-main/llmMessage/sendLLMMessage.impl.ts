@@ -329,9 +329,8 @@ const _sendOpenAICompatibleChat = async ({ messages, onText, onFinalMessage, onE
 	let fullReasoningSoFar = ''
 	let fullTextSoFar = ''
 
-	let toolName = ''
-	let toolId = ''
-	let toolParamsStr = ''
+	// 🚀 FIX: Track multiple tools by index for parallel tool calling support
+	const toolsByIndex = new Map<number, { name: string; id: string; paramsStr: string }>()
 
 	openai.chat.completions
 		.create(options)
@@ -343,16 +342,20 @@ const _sendOpenAICompatibleChat = async ({ messages, onText, onFinalMessage, onE
 				const newText = chunk.choices[0]?.delta?.content ?? ''
 				fullTextSoFar += newText
 
-				// tool call
+				// tool call - handle ALL tool indices for parallel execution
 				for (const tool of chunk.choices[0]?.delta?.tool_calls ?? []) {
-					const index = tool.index
-					if (index !== 0) continue
+					const index = tool.index ?? 0
 
-					toolName += tool.function?.name ?? ''
-					toolParamsStr += tool.function?.arguments ?? '';
-					toolId += tool.id ?? ''
+					// Initialize tool tracking for this index if not exists
+					if (!toolsByIndex.has(index)) {
+						toolsByIndex.set(index, { name: '', id: '', paramsStr: '' })
+					}
+
+					const toolData = toolsByIndex.get(index)!
+					toolData.name += tool.function?.name ?? ''
+					toolData.paramsStr += tool.function?.arguments ?? ''
+					toolData.id += tool.id ?? ''
 				}
-
 
 				// reasoning
 				let newReasoning = ''
@@ -362,21 +365,37 @@ const _sendOpenAICompatibleChat = async ({ messages, onText, onFinalMessage, onE
 					fullReasoningSoFar += newReasoning
 				}
 
+				// For streaming, show first tool (if any) for backward compatibility
+				const firstTool = toolsByIndex.get(0)
+				const streamingToolCall = firstTool && firstTool.name ?
+					{ name: firstTool.name, rawParams: {}, isDone: false, doneParams: [], id: firstTool.id } : undefined
+
 				// call onText
 				onText({
 					fullText: fullTextSoFar,
 					fullReasoning: fullReasoningSoFar,
-					toolCall: !toolName ? undefined : { name: toolName, rawParams: {}, isDone: false, doneParams: [], id: toolId },
+					toolCall: streamingToolCall,
 				})
 
 			}
-			// on final
-			if (!fullTextSoFar && !fullReasoningSoFar && !toolName) {
+			// on final - extract ALL completed tools
+			const allToolCalls = Array.from(toolsByIndex.entries())
+				.map(([index, toolData]) => rawToolCallObjOfParamsStr(toolData.name, toolData.paramsStr, toolData.id))
+				.filter((tc): tc is RawToolCallObj => tc !== null)
+
+			const toolCall = allToolCalls[0] // First tool for backward compatibility
+			const toolCalls = allToolCalls.length > 0 ? allToolCalls : undefined
+
+			const toolCallObj: { toolCall?: RawToolCallObj; toolCalls?: RawToolCallObj[] } = {}
+			if (toolCall) toolCallObj.toolCall = toolCall
+			if (toolCalls) toolCallObj.toolCalls = toolCalls
+
+			console.log(`[OpenAI SDK] Extracted ${allToolCalls.length} tool(s) from stream:`, allToolCalls.map(t => t.name).join(', '))
+
+			if (!fullTextSoFar && !fullReasoningSoFar && allToolCalls.length === 0) {
 				onError({ message: 'Void: Response from model was empty.', fullError: null })
 			}
 			else {
-				const toolCall = rawToolCallObjOfParamsStr(toolName, toolParamsStr, toolId)
-				const toolCallObj = toolCall ? { toolCall } : {}
 				onFinalMessage({ fullText: fullTextSoFar, fullReasoning: fullReasoningSoFar, anthropicReasoning: null, ...toolCallObj });
 			}
 		})
@@ -565,8 +584,17 @@ const sendAnthropicChat = async ({ messages, providerName, onText, onFinalMessag
 		const tools = response.content.filter(c => c.type === 'tool_use')
 		// console.log('TOOLS!!!!!!', JSON.stringify(tools, null, 2))
 		// console.log('TOOLS!!!!!!', JSON.stringify(response, null, 2))
-		const toolCall = tools[0] && rawToolCallObjOfAnthropicParams(tools[0])
-		const toolCallObj = toolCall ? { toolCall } : {}
+
+		// 🚀 FIX: Extract ALL tools for parallel tool calling support
+		const allToolCalls = tools.map(tool => rawToolCallObjOfAnthropicParams(tool)).filter((tc): tc is RawToolCallObj => tc !== null)
+		const toolCall = allToolCalls[0] // First tool for backward compatibility
+		const toolCalls = allToolCalls.length > 0 ? allToolCalls : undefined
+
+		const toolCallObj: { toolCall?: RawToolCallObj; toolCalls?: RawToolCallObj[] } = {}
+		if (toolCall) toolCallObj.toolCall = toolCall
+		if (toolCalls) toolCallObj.toolCalls = toolCalls
+
+		console.log(`[Anthropic SDK] Extracted ${allToolCalls.length} tool(s) from finalMessage:`, allToolCalls.map(t => t.name).join(', '))
 
 		onFinalMessage({ fullText, fullReasoning, anthropicReasoning, ...toolCallObj })
 	})
@@ -773,10 +801,8 @@ const sendGeminiChat = async ({
 	let fullReasoningSoFar = ''
 	let fullTextSoFar = ''
 
-	let toolName = ''
-	let toolParamsStr = ''
-	let toolId = ''
-
+	// 🚀 FIX: Track multiple tools by ID for parallel tool calling support
+	const toolsById = new Map<string, { name: string; paramsStr: string }>()
 
 	genAI.models.generateContentStream({
 		model: modelName,
@@ -796,38 +822,83 @@ const sendGeminiChat = async ({
 				const newText = chunk.text ?? ''
 				fullTextSoFar += newText
 
-				// tool call
+				// tool call - handle ALL function calls for parallel execution
 				const functionCalls = chunk.functionCalls
 				if (functionCalls && functionCalls.length > 0) {
-					const functionCall = functionCalls[0] // Get the first function call
-					toolName = functionCall.name ?? ''
-					toolParamsStr = JSON.stringify(functionCall.args ?? {})
-					toolId = functionCall.id ?? ''
+					for (const functionCall of functionCalls) {
+						const toolId = functionCall.id ?? ''
+						if (!toolId) continue
+
+						// Initialize tool tracking for this ID if not exists
+						if (!toolsById.has(toolId)) {
+							toolsById.set(toolId, { name: '', paramsStr: '' })
+						}
+
+						const toolData = toolsById.get(toolId)!
+						toolData.name = functionCall.name ?? toolData.name
+						// Accumulate params if they come in chunks, otherwise use the full args
+						if (functionCall.args) {
+							toolData.paramsStr = JSON.stringify(functionCall.args)
+						}
+					}
 				}
 
 				// (do not handle reasoning yet)
+
+				// For streaming, show first tool (if any) for backward compatibility
+				const firstTool = Array.from(toolsById.entries())[0]
+				const streamingToolCall = firstTool && firstTool[1].name ?
+					{ name: firstTool[1].name, rawParams: {}, isDone: false, doneParams: [], id: firstTool[0] } : undefined
 
 				// call onText
 				onText({
 					fullText: fullTextSoFar,
 					fullReasoning: fullReasoningSoFar,
-					toolCall: !toolName ? undefined : { name: toolName, rawParams: {}, isDone: false, doneParams: [], id: toolId },
+					toolCall: streamingToolCall,
 				})
 			}
 
-			// on final
-			if (!fullTextSoFar && !fullReasoningSoFar && !toolName) {
+			// on final - extract ALL completed tools
+			const allToolCalls = Array.from(toolsById.entries())
+				.map(([toolId, toolData]) => {
+					// Generate ID if missing (Gemini sometimes doesn't provide IDs)
+					const finalId = toolId || generateUuid()
+					return rawToolCallObjOfParamsStr(toolData.name, toolData.paramsStr, finalId)
+				})
+				.filter((tc): tc is RawToolCallObj => tc !== null)
+
+			const toolCall = allToolCalls[0] // First tool for backward compatibility
+			const toolCalls = allToolCalls.length > 0 ? allToolCalls : undefined
+
+			const toolCallObj: { toolCall?: RawToolCallObj; toolCalls?: RawToolCallObj[] } = {}
+			if (toolCall) toolCallObj.toolCall = toolCall
+			if (toolCalls) toolCallObj.toolCalls = toolCalls
+
+			console.log(`[Gemini SDK] Extracted ${allToolCalls.length} tool(s) from stream:`, allToolCalls.map(t => t.name).join(', '))
+
+			if (!fullTextSoFar && !fullReasoningSoFar && allToolCalls.length === 0) {
 				onError({ message: 'Void: Response from model was empty.', fullError: null })
 			} else {
-				if (!toolId) toolId = generateUuid() // ids are empty, but other providers might expect an id
-				const toolCall = rawToolCallObjOfParamsStr(toolName, toolParamsStr, toolId)
-				const toolCallObj = toolCall ? { toolCall } : {}
 				onFinalMessage({ fullText: fullTextSoFar, fullReasoning: fullReasoningSoFar, anthropicReasoning: null, ...toolCallObj });
 			}
 		})
 		.catch(error => {
 			const message = error?.message
 			if (typeof message === 'string') {
+
+				// Check for image-related errors (model doesn't support images)
+				if (error.message?.includes('image') || error.message?.includes('vision') || error.message?.includes('404')) {
+					// Check specifically if it's about image support
+					if (error.message?.includes('No endpoints found that support image input') ||
+						error.message?.includes('does not support image') ||
+						(error.status === 404 && error.message?.includes('image'))) {
+						onError({
+							message: `This model (${modelName}) does not support image input. Please use a vision-capable model.)`,
+							fullError: error
+						});
+						return;
+					}
+				}
 
 				if (error.message?.includes('API key')) {
 					onError({ message: invalidApiKeyMessage(providerName), fullError: error });

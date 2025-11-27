@@ -141,6 +141,10 @@ export class ToolsService implements IToolsService {
 	public callTool: CallBuiltinTool;
 	public stringOfResult: BuiltinToolResultToString;
 
+	// Mutex to serialize mutating/terminal tool calls
+	private _mutatingToolInProgress: boolean = false;
+	private _currentMutatingTool: string | null = null;
+
 	constructor(
 		@IFileService fileService: IFileService,
 		@IWorkspaceContextService workspaceContextService: IWorkspaceContextService,
@@ -397,69 +401,131 @@ export class ToolsService implements IToolsService {
 			// ---
 
 			create_file_or_folder: async ({ uri, isFolder }) => {
-				if (isFolder)
-					await fileService.createFolder(uri)
-				else {
-					await fileService.createFile(uri)
+				this._acquireMutatingLock('create_file_or_folder');
+				try {
+					if (isFolder)
+						await fileService.createFolder(uri)
+					else {
+						await fileService.createFile(uri)
+					}
+					return { result: {} }
+				} finally {
+					this._releaseMutatingLock();
 				}
-				return { result: {} }
 			},
 
 			delete_file_or_folder: async ({ uri, isRecursive }) => {
-				await fileService.del(uri, { recursive: isRecursive })
-				return { result: {} }
+				this._acquireMutatingLock('delete_file_or_folder');
+				try {
+					await fileService.del(uri, { recursive: isRecursive })
+					return { result: {} }
+				} finally {
+					this._releaseMutatingLock();
+				}
 			},
 
 			rewrite_file: async ({ uri, newContent }) => {
-				await voidModelService.initializeModel(uri)
-				if (this.commandBarService.getStreamState(uri) === 'streaming') {
-					throw new Error(`Another LLM is currently making changes to this file. Please stop streaming for now and ask the user to resume later.`)
+				this._acquireMutatingLock('rewrite_file');
+				try {
+					await voidModelService.initializeModel(uri)
+					if (this.commandBarService.getStreamState(uri) === 'streaming') {
+						throw new Error(`Another LLM is currently making changes to this file. Please stop streaming for now and ask the user to resume later.`)
+					}
+					await editCodeService.callBeforeApplyOrEdit(uri)
+					editCodeService.instantlyRewriteFile({ uri, newContent })
+					// at end, get lint errors
+					const lintErrorsPromise = Promise.resolve().then(async () => {
+						await timeout(2000)
+						const { lintErrors } = this._getLintErrors(uri)
+						this._releaseMutatingLock();
+						return { lintErrors }
+					})
+					return { result: lintErrorsPromise }
+				} catch (error) {
+					this._releaseMutatingLock();
+					throw error;
 				}
-				await editCodeService.callBeforeApplyOrEdit(uri)
-				editCodeService.instantlyRewriteFile({ uri, newContent })
-				// at end, get lint errors
-				const lintErrorsPromise = Promise.resolve().then(async () => {
-					await timeout(2000)
-					const { lintErrors } = this._getLintErrors(uri)
-					return { lintErrors }
-				})
-				return { result: lintErrorsPromise }
 			},
 
 			edit_file: async ({ uri, searchReplaceBlocks }) => {
-				await voidModelService.initializeModel(uri)
-				if (this.commandBarService.getStreamState(uri) === 'streaming') {
-					throw new Error(`Another LLM is currently making changes to this file. Please stop streaming for now and ask the user to resume later.`)
+				this._acquireMutatingLock('edit_file');
+				try {
+					await voidModelService.initializeModel(uri)
+					if (this.commandBarService.getStreamState(uri) === 'streaming') {
+						throw new Error(`Another LLM is currently making changes to this file. Please stop streaming for now and ask the user to resume later.`)
+					}
+					await editCodeService.callBeforeApplyOrEdit(uri)
+					editCodeService.instantlyApplySearchReplaceBlocks({ uri, searchReplaceBlocks })
+
+					// at end, get lint errors
+					const lintErrorsPromise = Promise.resolve().then(async () => {
+						await timeout(2000)
+						const { lintErrors } = this._getLintErrors(uri)
+						this._releaseMutatingLock();
+						return { lintErrors }
+					})
+
+					return { result: lintErrorsPromise }
+				} catch (error) {
+					this._releaseMutatingLock();
+					throw error;
 				}
-				await editCodeService.callBeforeApplyOrEdit(uri)
-				editCodeService.instantlyApplySearchReplaceBlocks({ uri, searchReplaceBlocks })
-
-				// at end, get lint errors
-				const lintErrorsPromise = Promise.resolve().then(async () => {
-					await timeout(2000)
-					const { lintErrors } = this._getLintErrors(uri)
-					return { lintErrors }
-				})
-
-				return { result: lintErrorsPromise }
 			},
 			// ---
 			run_command: async ({ command, cwd, terminalId }) => {
-				const { resPromise, interrupt } = await this.terminalToolService.runCommand(command, { type: 'temporary', cwd, terminalId })
-				return { result: resPromise, interruptTool: interrupt }
+				this._acquireMutatingLock('run_command');
+				try {
+					const { resPromise, interrupt } = await this.terminalToolService.runCommand(command, { type: 'temporary', cwd, terminalId })
+					// Wrap the result promise to release lock after completion
+					const wrappedPromise = resPromise.then((result) => {
+						this._releaseMutatingLock();
+						return result;
+					}).catch((error) => {
+						this._releaseMutatingLock();
+						throw error;
+					});
+					return { result: wrappedPromise, interruptTool: interrupt }
+				} catch (error) {
+					this._releaseMutatingLock();
+					throw error;
+				}
 			},
 			run_persistent_command: async ({ command, persistentTerminalId }) => {
-				const { resPromise, interrupt } = await this.terminalToolService.runCommand(command, { type: 'persistent', persistentTerminalId })
-				return { result: resPromise, interruptTool: interrupt }
+				this._acquireMutatingLock('run_persistent_command');
+				try {
+					const { resPromise, interrupt } = await this.terminalToolService.runCommand(command, { type: 'persistent', persistentTerminalId })
+					// Wrap the result promise to release lock after completion
+					const wrappedPromise = resPromise.then((result) => {
+						this._releaseMutatingLock();
+						return result;
+					}).catch((error) => {
+						this._releaseMutatingLock();
+						throw error;
+					});
+					return { result: wrappedPromise, interruptTool: interrupt }
+				} catch (error) {
+					this._releaseMutatingLock();
+					throw error;
+				}
 			},
 			open_persistent_terminal: async ({ cwd }) => {
-				const persistentTerminalId = await this.terminalToolService.createPersistentTerminal({ cwd })
-				return { result: { persistentTerminalId } }
+				this._acquireMutatingLock('open_persistent_terminal');
+				try {
+					const persistentTerminalId = await this.terminalToolService.createPersistentTerminal({ cwd })
+					return { result: { persistentTerminalId } }
+				} finally {
+					this._releaseMutatingLock();
+				}
 			},
 			kill_persistent_terminal: async ({ persistentTerminalId }) => {
-				// Close the background terminal by sending exit
-				await this.terminalToolService.killPersistentTerminal(persistentTerminalId)
-				return { result: {} }
+				this._acquireMutatingLock('kill_persistent_terminal');
+				try {
+					// Close the background terminal by sending exit
+					await this.terminalToolService.killPersistentTerminal(persistentTerminalId)
+					return { result: {} }
+				} finally {
+					this._releaseMutatingLock();
+				}
 			},
 		}
 
@@ -570,6 +636,19 @@ export class ToolsService implements IToolsService {
 
 	}
 
+
+	private _acquireMutatingLock(toolName: string): void {
+		if (this._mutatingToolInProgress) {
+			throw new Error(`Cannot run ${toolName} while another mutating/terminal tool (${this._currentMutatingTool}) is in progress. Mutating and terminal tools must run sequentially and alone. Please wait for the current operation to complete.`);
+		}
+		this._mutatingToolInProgress = true;
+		this._currentMutatingTool = toolName;
+	}
+
+	private _releaseMutatingLock(): void {
+		this._mutatingToolInProgress = false;
+		this._currentMutatingTool = null;
+	}
 
 	private _getLintErrors(uri: URI): { lintErrors: LintErrorItem[] | null } {
 		const lintErrors = this.markerService

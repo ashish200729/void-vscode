@@ -11,7 +11,7 @@ import { IStorageService, StorageScope, StorageTarget } from '../../../../platfo
 import { URI } from '../../../../base/common/uri.js';
 import { Emitter, Event } from '../../../../base/common/event.js';
 import { ILLMMessageService } from '../common/sendLLMMessageService.js';
-import { chat_userMessageContent, isABuiltinToolName } from '../common/prompt/prompts.js';
+import { chat_userMessageContent, isABuiltinToolName, readOnlyToolNames } from '../common/prompt/prompts.js';
 import { AnthropicReasoning, getErrorMessage, RawToolCallObj, RawToolParamsObj } from '../common/sendLLMMessageTypes.js';
 import { generateUuid } from '../../../../base/common/uuid.js';
 import { FeatureName, ModelSelection, ModelSelectionOptions } from '../common/voidSettingsTypes.js';
@@ -280,7 +280,7 @@ export interface IChatThreadService {
 	editUserMessageAndStreamResponse({ userMessage, messageIdx, threadId }: { userMessage: string, messageIdx: number, threadId: string }): Promise<void>;
 
 	// call to add a message
-	addUserMessageAndStreamResponse({ userMessage, threadId }: { userMessage: string, threadId: string }): Promise<void>;
+	addUserMessageAndStreamResponse({ userMessage, _chatSelections, _images, threadId }: { userMessage: string, _chatSelections?: StagingSelectionItem[], _images?: string[], threadId: string }): Promise<void>;
 
 	// approve/reject
 	approveLatestToolRequest(threadId: string): void;
@@ -502,12 +502,16 @@ class ChatThreadService extends Disposable implements IChatThreadService {
 	private _swapOutLatestStreamingToolWithResult = (threadId: string, tool: ChatMessage & { role: 'tool' }) => {
 		const messages = this.state.allThreads[threadId]?.messages
 		if (!messages) return false
-		const lastMsg = messages[messages.length - 1]
-		if (!lastMsg) return false
 
-		if (lastMsg.role === 'tool' && lastMsg.type !== 'invalid_params') {
-			this._editMessageInThread(threadId, messages.length - 1, tool)
-			return true
+		// Search backwards for a tool with matching ID (supports parallel execution)
+		for (let i = messages.length - 1; i >= 0; i--) {
+			const msg = messages[i]
+			if (msg.role === 'tool' && msg.id === tool.id && msg.type !== 'invalid_params') {
+				this._editMessageInThread(threadId, i, tool)
+				return true
+			}
+			// Stop searching after we pass all recent tool messages
+			if (msg.role !== 'tool') break
 		}
 		return false
 	}
@@ -795,7 +799,7 @@ class ChatThreadService extends Disposable implements IChatThreadService {
 				nAttempts += 1
 
 				type ResTypes =
-					| { type: 'llmDone', toolCall?: RawToolCallObj, info: { fullText: string, fullReasoning: string, anthropicReasoning: AnthropicReasoning[] | null } }
+					| { type: 'llmDone', toolCall?: RawToolCallObj, toolCalls?: RawToolCallObj[], info: { fullText: string, fullReasoning: string, anthropicReasoning: AnthropicReasoning[] | null } }
 					| { type: 'llmError', error?: { message: string; fullError: Error | null; } }
 					| { type: 'llmAborted' }
 
@@ -811,11 +815,43 @@ class ChatThreadService extends Disposable implements IChatThreadService {
 					overridesOfModel,
 					logging: { loggingName: `Chat - ${chatMode}`, loggingExtras: { threadId, nMessagesSent, chatMode } },
 					separateSystemMessage: separateSystemMessage,
-					onText: ({ fullText, fullReasoning, toolCall }) => {
+					onText: ({ fullText, fullReasoning, toolCall, toolCalls }) => {
 						this._setStreamState(threadId, { isRunning: 'LLM', llmInfo: { displayContentSoFar: fullText, reasoningSoFar: fullReasoning, toolCallSoFar: toolCall ?? null }, interrupt: Promise.resolve(() => { if (llmCancelToken) this._llmMessageService.abort(llmCancelToken) }) })
+
+						const streamingToolCalls = toolCalls && toolCalls.length ? toolCalls : (toolCall ? [toolCall] : [])
+						if (streamingToolCalls.length === 0) return
+
+						const thread = this.state.allThreads[threadId]
+						if (!thread) return
+
+						const existingToolIds = new Set<string>(thread.messages
+							.filter(m => m.role === 'tool')
+							.map(m => m.id))
+
+						const mcpTools = this._mcpService.getMCPTools()
+
+						for (const streamingTool of streamingToolCalls) {
+							if (!isABuiltinToolName(streamingTool.name)) continue
+							if (!readOnlyToolNames.includes(streamingTool.name)) continue
+							if (existingToolIds.has(streamingTool.id)) continue
+
+							const mcpTool = mcpTools?.find(t => t.name === streamingTool.name)
+							this._addMessageToThread(threadId, {
+								role: 'tool',
+								type: 'running_now',
+								name: streamingTool.name,
+								params: {},
+								content: '(Loading...)',
+								result: null,
+								id: streamingTool.id,
+								rawParams: streamingTool.rawParams,
+								mcpServerName: mcpTool?.mcpServerName,
+							})
+							existingToolIds.add(streamingTool.id)
+						}
 					},
-					onFinalMessage: async ({ fullText, fullReasoning, toolCall, anthropicReasoning, }) => {
-						resMessageIsDonePromise({ type: 'llmDone', toolCall, info: { fullText, fullReasoning, anthropicReasoning } }) // resolve with tool calls
+					onFinalMessage: async ({ fullText, fullReasoning, toolCall, toolCalls, anthropicReasoning, }) => {
+						resMessageIsDonePromise({ type: 'llmDone', toolCall, toolCalls, info: { fullText, fullReasoning, anthropicReasoning } }) // resolve with tool calls
 					},
 					onError: async (error) => {
 						resMessageIsDonePromise({ type: 'llmError', error: error })
@@ -875,24 +911,105 @@ class ChatThreadService extends Disposable implements IChatThreadService {
 				}
 
 				// llm res success
-				const { toolCall, info } = llmRes
+				const { toolCall, toolCalls, info } = llmRes
 
 				this._addMessageToThread(threadId, { role: 'assistant', displayContent: info.fullText, reasoning: info.fullReasoning, anthropicReasoning: info.anthropicReasoning })
 
 				this._setStreamState(threadId, { isRunning: 'idle', interrupt: 'not_needed' }) // just decorative for clarity
 
-				// call tool if there is one
-				if (toolCall) {
-					const mcpTools = this._mcpService.getMCPTools()
-					const mcpTool = mcpTools?.find(t => t.name === toolCall.name)
+				// Process multiple tool calls if present, otherwise fall back to single toolCall
+				const toolsToExecute = toolCalls && toolCalls.length > 0 ? toolCalls : (toolCall ? [toolCall] : [])
 
-					const { awaitingUserApproval, interrupted } = await this._runToolCall(threadId, toolCall.name, toolCall.id, mcpTool?.mcpServerName, { preapproved: false, unvalidatedToolParams: toolCall.rawParams })
-					if (interrupted) {
-						this._setStreamState(threadId, undefined)
-						return
+				// Debug logging: Verify LLM output multiple tools
+				if (toolsToExecute.length > 0) {
+					console.log(`[Parallel Tools] LLM output ${toolsToExecute.length} tool(s):`, toolsToExecute.map(t => t.name).join(', '))
+					if (toolCalls && toolCalls.length > 1) {
+						console.log(`[Parallel Tools] ✅ Multiple tools detected in single response!`)
+					} else if (toolCall && !toolCalls) {
+						console.log(`[Parallel Tools] ⚠️ Only single tool call detected (toolCalls array was empty)`)
 					}
-					if (awaitingUserApproval) { isRunningWhenEnd = 'awaiting_user' }
-					else { shouldSendAnotherMessage = true }
+				}
+
+				if (toolsToExecute.length > 0) {
+					const mcpTools = this._mcpService.getMCPTools()
+					const thread = this.state.allThreads[threadId]
+					const existingToolIds = new Set<string>(thread?.messages
+						?.filter(m => m.role === 'tool')
+						.map(m => m.id) ?? [])
+
+					// Group tools by whether they can be parallelized
+					const readSearchTools = toolsToExecute.filter(tool => isABuiltinToolName(tool.name) && readOnlyToolNames.includes(tool.name))
+					const mutatingTools = toolsToExecute.filter(tool => !isABuiltinToolName(tool.name) || !readOnlyToolNames.includes(tool.name))
+
+					if (readSearchTools.length > 1) {
+						console.log(`[Parallel Tools] 🚀 Executing ${readSearchTools.length} read/search tools in parallel:`, readSearchTools.map(t => t.name).join(', '))
+					}
+
+					// Execute read/search tools in parallel
+					if (readSearchTools.length > 0) {
+						// 🚀 PRE-ADD all tool placeholders to UI IMMEDIATELY for instant visual feedback
+						// Batch all additions into a single state update for better performance
+						const placeholderTools: ChatMessage[] = []
+						for (const tool of readSearchTools) {
+							const mcpTool = mcpTools?.find(t => t.name === tool.name)
+							if (existingToolIds.has(tool.id)) continue
+							placeholderTools.push({
+								role: 'tool' as const,
+								type: 'running_now' as const,
+								name: tool.name,
+								params: {}, // Will be validated during actual execution
+								content: '(Loading...)',
+								result: null,
+								id: tool.id,
+								rawParams: tool.rawParams,
+								mcpServerName: mcpTool?.mcpServerName
+							})
+							existingToolIds.add(tool.id)
+						}
+					// Add all placeholders in a single batch update
+						this._addMessagesToThreadBatch(threadId, placeholderTools)
+
+						// Execute all tools in parallel
+						const results = await Promise.all(readSearchTools.map(async (tool) => {
+							const mcpTool = mcpTools?.find(t => t.name === tool.name)
+							return this._runToolCall(threadId, tool.name, tool.id, mcpTool?.mcpServerName, { preapproved: false, unvalidatedToolParams: tool.rawParams })
+						}))
+
+						// Check if any tool was interrupted or awaiting approval
+						for (const result of results) {
+							if (result.interrupted) {
+								this._setStreamState(threadId, undefined)
+								return
+							}
+							if (result.awaitingUserApproval) {
+								isRunningWhenEnd = 'awaiting_user'
+							}
+						}
+					}
+
+					// Execute mutating/terminal tools sequentially (one at a time)
+					for (const tool of mutatingTools) {
+						const mcpTool = mcpTools?.find(t => t.name === tool.name)
+						const { awaitingUserApproval, interrupted } = await this._runToolCall(
+							threadId,
+							tool.name,
+							tool.id,
+							mcpTool?.mcpServerName,
+							{ preapproved: false, unvalidatedToolParams: tool.rawParams }
+						)
+						if (interrupted) {
+							this._setStreamState(threadId, undefined)
+							return
+						}
+						if (awaitingUserApproval) {
+							isRunningWhenEnd = 'awaiting_user'
+						}
+					}
+
+					// If no tools are awaiting approval, send another message
+					if (isRunningWhenEnd !== 'awaiting_user') {
+						shouldSendAnotherMessage = true
+					}
 
 					this._setStreamState(threadId, { isRunning: 'idle', interrupt: 'not_needed' }) // just decorative, for clarity
 				}
@@ -1231,7 +1348,7 @@ We only need to do it for files that were edited since `from`, ie files between 
 	}
 
 
-	private async _addUserMessageAndStreamResponse({ userMessage, _chatSelections, threadId }: { userMessage: string, _chatSelections?: StagingSelectionItem[], threadId: string }) {
+	private async _addUserMessageAndStreamResponse({ userMessage, _chatSelections, _images, threadId }: { userMessage: string, _chatSelections?: StagingSelectionItem[], _images?: string[], threadId: string }) {
 		const thread = this.state.allThreads[threadId]
 		if (!thread) return // should never happen
 
@@ -1251,7 +1368,7 @@ We only need to do it for files that were edited since `from`, ie files between 
 		const currSelns: StagingSelectionItem[] = _chatSelections ?? thread.state.stagingSelections
 
 		const userMessageContent = await chat_userMessageContent(instructions, currSelns, { directoryStrService: this._directoryStringService, fileService: this._fileService }) // user message + names of files (NOT content)
-		const userHistoryElt: ChatMessage = { role: 'user', content: userMessageContent, displayContent: instructions, selections: currSelns, state: defaultMessageState }
+		const userHistoryElt: ChatMessage = { role: 'user', content: userMessageContent, displayContent: instructions, selections: currSelns, images: _images, state: defaultMessageState }
 		this._addMessageToThread(threadId, userHistoryElt)
 
 		this._setThreadState(threadId, { currCheckpointIdx: null }) // no longer at a checkpoint because started streaming
@@ -1268,7 +1385,7 @@ We only need to do it for files that were edited since `from`, ie files between 
 	}
 
 
-	async addUserMessageAndStreamResponse({ userMessage, _chatSelections, threadId }: { userMessage: string, _chatSelections?: StagingSelectionItem[], threadId: string }) {
+	async addUserMessageAndStreamResponse({ userMessage, _chatSelections, _images, threadId }: { userMessage: string, _chatSelections?: StagingSelectionItem[], _images?: string[], threadId: string }) {
 		const thread = this.state.allThreads[threadId];
 		if (!thread) return
 
@@ -1291,7 +1408,7 @@ We only need to do it for files that were edited since `from`, ie files between 
 		}
 
 		// Now call the original method to add the user message and stream the response
-		await this._addUserMessageAndStreamResponse({ userMessage, _chatSelections, threadId });
+		await this._addUserMessageAndStreamResponse({ userMessage, _chatSelections, _images, threadId });
 
 	}
 
@@ -1320,7 +1437,8 @@ We only need to do it for files that were edited since `from`, ie files between 
 		})
 
 		// re-add the message and stream it
-		this._addUserMessageAndStreamResponse({ userMessage, _chatSelections: currSelns, threadId })
+		const currImages = thread.messages[messageIdx].images
+		this._addUserMessageAndStreamResponse({ userMessage, _chatSelections: currSelns, _images: currImages, threadId })
 	}
 
 	// ---------- the rest ----------
@@ -1672,6 +1790,30 @@ We only need to do it for files that were edited since `from`, ie files between 
 			...currentThreads,
 			[newThread.id]: newThread,
 		}
+		this._storeAllThreads(newThreads)
+		this._setState({ allThreads: newThreads })
+	}
+
+	private _addMessagesToThreadBatch(threadId: string, messages: ChatMessage[]) {
+		if (messages.length === 0) return
+		const { allThreads } = this.state
+		const oldThread = allThreads[threadId]
+		if (!oldThread) return // should never happen
+
+		const newThread = {
+			...oldThread,
+			lastModified: new Date().toISOString(),
+			messages: [
+				...oldThread.messages,
+				...messages,
+			],
+		}
+
+		const newThreads = {
+			...allThreads,
+			[oldThread.id]: newThread,
+		}
+
 		this._storeAllThreads(newThreads)
 		this._setState({ allThreads: newThreads })
 	}

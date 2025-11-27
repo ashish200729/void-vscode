@@ -6,6 +6,7 @@
 import { Color, RGBA } from '../../../../../base/common/color.js';
 import { registerColor } from '../../../../../platform/theme/common/colorUtils.js';
 
+
 // editCodeService colors
 const sweepBG = new Color(new RGBA(100, 100, 100, .2));
 const highlightBG = new Color(new RGBA(100, 100, 100, .1));

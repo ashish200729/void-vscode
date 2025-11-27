@@ -81,6 +81,7 @@
 		"settings.modifiedItemIndicator": "#BB800966",
 		"sideBar.background": "#181818",
 		"sideBar.border": "#2B2B2B",
+		"sideBar.dropBackground": "#FFD70080",
 		"sideBar.foreground": "#CCCCCC",
 		"sideBarSectionHeader.background": "#181818",
 		"sideBarSectionHeader.border": "#2B2B2B",

@@ -29,6 +29,9 @@ export const getErrorMessage: (error: unknown) => string = (error) => {
 
 
 
+// Supported image MIME types for Anthropic API
+type AnthropicImageMimeType = 'image/png' | 'image/jpeg' | 'image/gif' | 'image/webp'
+
 export type AnthropicLLMChatMessage = {
 	role: 'assistant',
 	content: string | (AnthropicReasoning | { type: 'text'; text: string }
@@ -37,7 +40,9 @@ export type AnthropicLLMChatMessage = {
 } | {
 	role: 'user',
 	content: string | (
-		{ type: 'text'; text: string; } | { type: 'tool_result'; tool_use_id: string; content: string; }
+		| { type: 'text'; text: string; }
+		| { type: 'tool_result'; tool_use_id: string; content: string; }
+		| { type: 'image'; source: { type: 'base64'; media_type: AnthropicImageMimeType; data: string } }
 	)[]
 }
 export type OpenAILLMChatMessage = {
@@ -51,6 +56,9 @@ export type OpenAILLMChatMessage = {
 	role: 'tool',
 	content: string;
 	tool_call_id: string;
+} | {
+	role: 'user';
+	content: Array<{ type: 'text'; text: string } | { type: 'image_url'; image_url: { url: string } }>;
 }
 
 export type GeminiLLMChatMessage = {
@@ -64,6 +72,7 @@ export type GeminiLLMChatMessage = {
 	parts: (
 		| { text: string; }
 		| { functionResponse: { id: string; name: ToolName, response: { output: string } } }
+		| { inlineData: { mimeType: string; data: string } }
 	)[];
 }
 
@@ -91,8 +100,8 @@ export type RawToolCallObj = {
 
 export type AnthropicReasoning = ({ type: 'thinking'; thinking: any; signature: string; } | { type: 'redacted_thinking', data: any })
 
-export type OnText = (p: { fullText: string; fullReasoning: string; toolCall?: RawToolCallObj }) => void
-export type OnFinalMessage = (p: { fullText: string; fullReasoning: string; toolCall?: RawToolCallObj; anthropicReasoning: AnthropicReasoning[] | null }) => void // id is tool_use_id
+export type OnText = (p: { fullText: string; fullReasoning: string; toolCall?: RawToolCallObj; toolCalls?: RawToolCallObj[] }) => void
+export type OnFinalMessage = (p: { fullText: string; fullReasoning: string; toolCall?: RawToolCallObj; toolCalls?: RawToolCallObj[]; anthropicReasoning: AnthropicReasoning[] | null }) => void // id is tool_use_id
 export type OnError = (p: { message: string; fullError: Error | null }) => void
 export type OnAbort = () => void
 export type AbortRef = { current: (() => void) | null }

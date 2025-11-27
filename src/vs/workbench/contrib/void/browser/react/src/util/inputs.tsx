@@ -352,9 +352,14 @@ type InputBox2Props = {
 	onKeyDown?: (e: React.KeyboardEvent<HTMLTextAreaElement>) => void;
 	onFocus?: (e: React.FocusEvent<HTMLTextAreaElement>) => void;
 	onBlur?: (e: React.FocusEvent<HTMLTextAreaElement>) => void;
+	onPaste?: (e: React.ClipboardEvent<HTMLTextAreaElement>) => void;
+	onDragEnter?: (e: React.DragEvent<HTMLTextAreaElement>) => void;
+	onDragOver?: (e: React.DragEvent<HTMLTextAreaElement>) => void;
+	onDragLeave?: (e: React.DragEvent<HTMLTextAreaElement>) => void;
+	onDrop?: (e: React.DragEvent<HTMLTextAreaElement>) => void;
 	onChangeHeight?: (newHeight: number) => void;
 }
-export const VoidInputBox2 = forwardRef<HTMLTextAreaElement, InputBox2Props>(function X({ initValue, placeholder, multiline, enableAtToMention, fnsRef, className, onKeyDown, onFocus, onBlur, onChangeText }, ref) {
+export const VoidInputBox2 = forwardRef<HTMLTextAreaElement, InputBox2Props>(function X({ initValue, placeholder, multiline, enableAtToMention, fnsRef, className, onKeyDown, onFocus, onBlur, onChangeText, onPaste, onDragEnter, onDragOver, onDragLeave, onDrop }, ref) {
 
 
 	// mirrors whatever is in ref
@@ -750,6 +755,11 @@ export const VoidInputBox2 = forwardRef<HTMLTextAreaElement, InputBox2Props>(fun
 
 			onFocus={onFocus}
 			onBlur={onBlur}
+			onPaste={onPaste}
+			onDragEnter={onDragEnter}
+			onDragOver={onDragOver}
+			onDragLeave={onDragLeave}
+			onDrop={onDrop}
 
 			disabled={!isEnabled}
 
@@ -802,6 +812,79 @@ export const VoidInputBox2 = forwardRef<HTMLTextAreaElement, InputBox2Props>(fun
 				onKeyDown?.(e)
 			}, [onKeyDown, onMenuKeyDown, multiline])}
 
+			onDragEnter={useCallback((e: React.DragEvent<HTMLTextAreaElement>) => {
+				e.preventDefault();
+				e.stopPropagation();
+			}, [])}
+
+			onDragOver={useCallback((e: React.DragEvent<HTMLTextAreaElement>) => {
+				e.preventDefault();
+				e.stopPropagation();
+			}, [])}
+
+			onDrop={useCallback((e: React.DragEvent<HTMLTextAreaElement>) => {
+				e.preventDefault();
+				e.stopPropagation();
+
+				const dataTransfer = e.dataTransfer;
+				if (!dataTransfer) return;
+
+				// Extract file/folder URIs from the drag event
+				const uriListData = dataTransfer.getData('text/uri-list');
+				const resourcesData = dataTransfer.getData('application/vnd.code.tree.explorerviewlet');
+
+				let uris: string[] = [];
+
+				// Try to parse URIs from different data formats
+				if (uriListData) {
+					uris = uriListData.split('\n').filter(uri => uri.trim().length > 0);
+				} else if (resourcesData) {
+					try {
+						const parsedData = JSON.parse(resourcesData);
+						if (Array.isArray(parsedData)) {
+							uris = parsedData.map((item: any) => item.uri || item).filter(Boolean);
+						}
+					} catch (error) {
+						console.error('Failed to parse dropped resources:', error);
+					}
+				}
+
+				// Process each dropped URI
+				for (const uriString of uris) {
+					try {
+						// Parse the URI string to create a proper URI object
+						const uri = URI.parse(uriString);
+
+						// Determine if it's a file or folder by checking if it has an extension
+						// This is a simple heuristic; VSCode's file service would be more accurate
+						const pathSegments = uri.path.split('/');
+						const lastSegment = pathSegments[pathSegments.length - 1] || '';
+						const isFolder = !lastSegment.includes('.');
+
+						let newSelection: StagingSelectionItem;
+						if (isFolder) {
+							newSelection = {
+								type: 'Folder',
+								uri: uri,
+								language: undefined,
+								state: undefined,
+							};
+						} else {
+							newSelection = {
+								type: 'File',
+								uri: uri,
+								language: languageService.guessLanguageIdByFilepathOrFirstLine(uri) || '',
+								state: { wasAddedAsCurrentFile: false },
+							};
+						}
+
+						chatThreadService.addNewStagingSelection(newSelection);
+					} catch (error) {
+						console.error('Failed to process dropped item:', error);
+					}
+				}
+			}, [chatThreadService, languageService])}
+
 			rows={1}
 			placeholder={placeholder}
 		/>
@@ -836,8 +919,8 @@ export const VoidInputBox2 = forwardRef<HTMLTextAreaElement, InputBox2Props>(fun
 
 
 				{/* Options list */}
-				<div className='max-h-[400px] w-full max-w-full overflow-y-auto overflow-x-auto'>
-					<div className="w-max min-w-full flex flex-col gap-0 text-nowrap flex-nowrap">
+				<div className='max-h-[400px] w-full overflow-y-auto overflow-x-hidden'>
+					<div className="w-full flex flex-col gap-0">
 						{options.length === 0 ?
 							<div className="text-void-fg-3 px-3 py-0.5">No results found</div>
 							: options.map((o, oIdx) => {
@@ -850,19 +933,24 @@ export const VoidInputBox2 = forwardRef<HTMLTextAreaElement, InputBox2Props>(fun
 										className={`
 											flex items-center gap-2
 											px-3 py-1 cursor-pointer
+											min-w-0
 											${oIdx === optionIdx ? 'bg-blue-500 text-white/80' : 'bg-void-bg-2-alt text-void-fg-1'}
 										`}
 										onClick={() => { onSelectOption(); }}
 										onMouseMove={() => { setOptionIdx(oIdx) }}
 									>
-										{<o.iconInMenu size={12} />}
+										<div className="flex-shrink-0">
+											{<o.iconInMenu size={12} />}
+										</div>
 
-										<span>{o.abbreviatedName}</span>
+										<span className="truncate flex-shrink" title={o.abbreviatedName}>{o.abbreviatedName}</span>
 
-										{o.fullName && o.fullName !== o.abbreviatedName && <span className="opacity-60 text-sm">{o.fullName}</span>}
+										{o.fullName && o.fullName !== o.abbreviatedName && <span className="opacity-60 text-sm truncate flex-shrink" title={o.fullName}>{o.fullName}</span>}
 
 										{o.nextOptions || o.generateNextOptions ? (
-											<ChevronRight size={12} />
+											<div className="flex-shrink-0">
+												<ChevronRight size={12} />
+											</div>
 										) : null}
 
 									</div>
@@ -1244,7 +1332,6 @@ export const VoidCheckBox = ({ label, value, onClick, className }: { label: stri
 			instance.dispose()
 			instance.domNode.remove()
 		}, [])}
-
 	/>
 
 }
@@ -1279,6 +1366,8 @@ export const VoidCustomDropdownBox = <T extends NonNullable<any>>({
 	offsetPx?: number;
 }) => {
 	const [isOpen, setIsOpen] = useState(false);
+	const [hoveredOption, setHoveredOption] = useState<T | null>(null);
+	const [hoverItemRef, setHoverItemRef] = useState<HTMLDivElement | null>(null);
 	const measureRef = useRef<HTMLDivElement>(null);
 
 	// Replace manual positioning with floating-ui
@@ -1325,6 +1414,28 @@ export const VoidCustomDropdownBox = <T extends NonNullable<any>>({
 		],
 		whileElementsMounted: autoUpdate,
 		strategy: 'fixed',
+	});
+
+	// Hover panel positioning
+	const hoverPanelFloating = useFloating({
+		open: hoveredOption !== null && isOpen,
+		placement: 'right-start',
+		middleware: [
+			offset({ mainAxis: 8 }),
+			flip({
+				boundary: document.body,
+				padding: 8
+			}),
+			shift({
+				boundary: document.body,
+				padding: 8,
+			}),
+		],
+		whileElementsMounted: autoUpdate,
+		strategy: 'fixed',
+		elements: {
+			reference: hoverItemRef,
+		}
 	});
 
 	// if the selected option is null, set the selection to the 0th option
@@ -1414,67 +1525,91 @@ export const VoidCustomDropdownBox = <T extends NonNullable<any>>({
 
 			{/* Dropdown Menu */}
 			{isOpen && (
-				<div
-					ref={refs.setFloating}
-					className="z-[100] bg-void-bg-1 border-void-border-3 border rounded shadow-lg"
-					style={{
-						position: strategy,
-						top: y ?? 0,
-						left: x ?? 0,
-						width: (matchInputWidth
-							? (refs.reference.current instanceof HTMLElement ? refs.reference.current.offsetWidth : 0)
-							: Math.max(
-								(refs.reference.current instanceof HTMLElement ? refs.reference.current.offsetWidth : 0),
-								(measureRef.current instanceof HTMLElement ? measureRef.current.offsetWidth : 0)
-							))
-					}}
-					onWheel={(e) => e.stopPropagation()}
-				><div className='overflow-auto max-h-80'>
+			<div
+				ref={refs.setFloating}
+				className="z-[100] rounded border border-void-border-2 bg-void-bg-1 shadow-lg"
+				style={{
+				position: strategy,
+				top: y ?? 0,
+				left: x ?? 0,
+				width: matchInputWidth
+					? (refs.reference.current instanceof HTMLElement ? refs.reference.current.offsetWidth : 'auto')
+					: 'max-content',
+				minWidth: refs.reference.current instanceof HTMLElement ? refs.reference.current.offsetWidth : 'auto',
+				maxWidth: '300px',
+				}}
+				onWheel={(e) => e.stopPropagation()}
+			>
+				<div className="overflow-auto max-h-80 py-1">
+				{options.map((option) => {
+					const thisOptionIsSelected = getOptionsEqual(option, selectedOption);
+					const optionName = getOptionDropdownName(option);
 
-						{options.map((option) => {
-							const thisOptionIsSelected = getOptionsEqual(option, selectedOption);
-							const optionName = getOptionDropdownName(option);
-							const optionDetail = getOptionDropdownDetail?.(option) || '';
-
-							return (
-								<div
-									key={optionName}
-									className={`flex items-center px-2 py-1 pr-4 cursor-pointer whitespace-nowrap
-									transition-all duration-100
-									${thisOptionIsSelected ? 'bg-blue-500 text-white/80' : 'hover:bg-blue-500 hover:text-white/80'}
-								`}
-									onClick={() => {
-										onChangeOption(option);
-										setIsOpen(false);
-									}}
-								>
-									<div className="w-4 flex justify-center flex-shrink-0">
-										{thisOptionIsSelected && (
-											<svg className="size-3" viewBox="0 0 12 12" fill="none">
-												<path
-													d="M10 3L4.5 8.5L2 6"
-													stroke="currentColor"
-													strokeWidth="1.5"
-													strokeLinecap="round"
-													strokeLinejoin="round"
-												/>
-											</svg>
-										)}
-									</div>
-									<span className="flex justify-between items-center w-full gap-x-1">
-										<span>{optionName}</span>
-										<span className='opacity-60'>{optionDetail}</span>
-									</span>
-								</div>
-							);
-						})}
+					return (
+					<div
+						key={optionName}
+						ref={(el) => {
+							if (hoveredOption && getOptionsEqual(option, hoveredOption)) {
+								setHoverItemRef(el);
+							}
+						}}
+						className={`
+						flex items-center px-3 py-1.5 cursor-pointer
+						transition-colors
+						${
+							thisOptionIsSelected
+							? "bg-blue-600 text-white"
+							: "text-void-fg-2 hover:bg-void-bg-2"
+						}
+						`}
+						onClick={() => {
+						onChangeOption(option);
+						setIsOpen(false);
+						}}
+						onMouseEnter={() => setHoveredOption(option)}
+						onMouseLeave={() => setHoveredOption(null)}
+					>
+						{/* Option Text - Only show name */}
+						<span
+							className={`truncate ${
+							thisOptionIsSelected ? "text-white" : "text-void-fg-2"
+							}`}
+						>
+							{optionName}
+						</span>
 					</div>
+					);
+				})}
+				</div>
+			</div>
+			)}
 
+			{/* Hover Info Panel */}
+			{hoveredOption && isOpen && getOptionDropdownDetail && (
+				<div
+					ref={hoverPanelFloating.refs.setFloating}
+					className="z-[101] rounded border border-void-border-2 bg-void-bg-1 shadow-lg p-3 w-max max-w-[280px]"
+					style={{
+						position: hoverPanelFloating.strategy,
+						top: hoverPanelFloating.y ?? 0,
+						left: hoverPanelFloating.x ?? 0,
+					}}
+				>
+					<div className="space-y-1.5">
+						<div className="font-medium text-void-fg-1 text-sm pb-1.5 border-b border-void-border-2">
+							{getOptionDropdownName(hoveredOption)}
+						</div>
+						<div className="text-xs text-void-fg-3 whitespace-pre-wrap leading-relaxed">
+							{getOptionDropdownDetail(hoveredOption)}
+						</div>
+					</div>
 				</div>
 			)}
 		</div>
 	);
 };
+
+
 
 
 

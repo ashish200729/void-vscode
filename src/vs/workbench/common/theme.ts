@@ -628,7 +628,12 @@ export const SIDE_BAR_TITLE_BORDER = registerColor('sideBarTitle.border', {
 	hcLight: SIDE_BAR_BORDER
 }, localize('sideBarTitleBorder', "Side bar title border color on the bottom, separating the title from the views. The side bar is the container for views like explorer and search."));
 
-export const SIDE_BAR_DRAG_AND_DROP_BACKGROUND = registerColor('sideBar.dropBackground', EDITOR_DRAG_AND_DROP_BACKGROUND, localize('sideBarDragAndDropBackground', "Drag and drop feedback color for the side bar sections. The color should have transparency so that the side bar sections can still shine through. The side bar is the container for views like explorer and search. Side bar sections are views nested within the side bar."));
+export const SIDE_BAR_DRAG_AND_DROP_BACKGROUND = registerColor('sideBar.dropBackground',{
+	dark: Color.fromHex('#8C7400').transparent(0.5),      // darker golden brown
+	light: Color.fromHex('#FFE867').transparent(0.18),    // soft light yellow
+	hcDark: null,                                         // leave null if not needed
+	hcLight: Color.fromHex('#D4A500').transparent(0.50)   // strong high-contrast variant
+}, localize('sideBarDragAndDropBackground', "Drag and drop feedback color for the side bar sections. The color should have transparency so that the side bar sections can still shine through. The side bar is the container for views like explorer and search. Side bar sections are views nested within the side bar."));
 
 export const SIDE_BAR_SECTION_HEADER_BACKGROUND = registerColor('sideBarSectionHeader.background', {
 	dark: Color.fromHex('#808080').transparent(0.2),

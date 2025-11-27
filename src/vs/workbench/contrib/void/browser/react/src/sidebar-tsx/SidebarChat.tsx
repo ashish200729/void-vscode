@@ -22,19 +22,20 @@ import { ChatMode, displayInfoOfProviderName, FeatureName, isFeatureNameDisabled
 import { ICommandService } from '../../../../../../../platform/commands/common/commands.js';
 import { WarningBox } from '../void-settings-tsx/WarningBox.js';
 import { getModelCapabilities, getIsReasoningEnabledState } from '../../../../common/modelCapabilities.js';
-import { AlertTriangle, File, Ban, Check, ChevronRight, Dot, FileIcon, Pencil, Undo, Undo2, X, Flag, Copy as CopyIcon, Info, CirclePlus, Ellipsis, CircleEllipsis, Folder, ALargeSmall, TypeOutline, Text } from 'lucide-react';
+import { AlertTriangle, File, Ban, Check, ChevronRight, Dot, FileIcon, Pencil, Undo, Undo2, X, Flag, Copy as CopyIcon, Info, CirclePlus, Ellipsis, CircleEllipsis, Folder, ALargeSmall, TypeOutline, Text, Image as ImageIcon } from 'lucide-react';
 import { ChatMessage, CheckpointEntry, StagingSelectionItem, ToolMessage } from '../../../../common/chatThreadServiceTypes.js';
 import { approvalTypeOfBuiltinToolName, BuiltinToolCallParams, BuiltinToolName, ToolName, LintErrorItem, ToolApprovalType, toolApprovalTypes } from '../../../../common/toolsServiceTypes.js';
 import { CopyButton, EditToolAcceptRejectButtonsHTML, IconShell1, JumpToFileButton, JumpToTerminalButton, StatusIndicator, StatusIndicatorForApplyButton, useApplyStreamState, useEditToolStreamState } from '../markdown/ApplyBlockHoverButtons.js';
 import { IsRunningType } from '../../../chatThreadService.js';
 import { acceptAllBg, acceptBorder, buttonFontSize, buttonTextColor, rejectAllBg, rejectBg, rejectBorder } from '../../../../common/helpers/colors.js';
 import { builtinToolNames, isABuiltinToolName, MAX_FILE_CHARS_PAGE, MAX_TERMINAL_INACTIVE_TIME } from '../../../../common/prompt/prompts.js';
-import { RawToolCallObj } from '../../../../common/sendLLMMessageTypes.js';
+import { RawToolCallObj, RawToolParamsObj } from '../../../../common/sendLLMMessageTypes.js';
 import ErrorBoundary from './ErrorBoundary.js';
 import { ToolApprovalTypeSwitch } from '../void-settings-tsx/Settings.js';
 
 import { persistentTerminalNameOfId } from '../../../terminalToolService.js';
 import { removeMCPToolNamePrefix } from '../../../../common/mcpServiceTypes.js';
+import { TextShimmer } from '../util/TextShimmer.js';
 
 
 
@@ -272,7 +273,7 @@ const nameOfChatMode = {
 }
 
 const detailOfChatMode = {
-	'normal': 'Normal chat',
+	'normal': 'Normal chat mode',
 	'gather': 'Reads files, but can\'t edit',
 	'agent': 'Edits files and uses tools',
 }
@@ -299,8 +300,9 @@ const ChatModeDropdown = ({ className }: { className: string }) => {
 		getOptionDropdownName={(val) => nameOfChatMode[val]}
 		getOptionDropdownDetail={(val) => detailOfChatMode[val]}
 		getOptionsEqual={(a, b) => a === b}
+		matchInputWidth={false}
+		offsetPx={-3}
 	/>
-
 }
 
 
@@ -333,6 +335,14 @@ interface VoidChatAreaProps {
 	onClickAnywhere?: () => void;
 	// Optional close button
 	onClose?: () => void;
+	// Optional image button in bottom row
+	imageButton?: React.ReactNode;
+	// Drag and drop handlers for images
+	onDragEnter?: (e: React.DragEvent) => void;
+	onDragOver?: (e: React.DragEvent) => void;
+	onDragLeave?: (e: React.DragEvent) => void;
+	onDrop?: (e: React.DragEvent) => void;
+	isDragOver?: boolean;
 
 	featureName: FeatureName;
 }
@@ -354,6 +364,12 @@ export const VoidChatArea: React.FC<VoidChatAreaProps> = ({
 	setSelections,
 	featureName,
 	loadingIcon,
+	imageButton,
+	onDragEnter,
+	onDragOver,
+	onDragLeave,
+	onDrop,
+	isDragOver = false,
 }) => {
 	return (
 		<div
@@ -364,13 +380,17 @@ export const VoidChatArea: React.FC<VoidChatAreaProps> = ({
                 rounded-md
                 bg-void-bg-1
 				transition-all duration-200
-				border border-void-border-3 focus-within:border-void-border-1 hover:border-void-border-1
+				border ${isDragOver ? 'border-void-border-1 border-2 border-dashed bg-void-bg-2-alt/50 ring-2 ring-void-border-1/30' : 'border-void-border-3'} focus-within:border-void-border-1 hover:border-void-border-1
 				max-h-[80vh] overflow-y-auto
                 ${className}
             `}
 			onClick={(e) => {
 				onClickAnywhere?.()
 			}}
+			onDragEnter={onDragEnter}
+			onDragOver={onDragOver}
+			onDragLeave={onDragLeave}
+			onDrop={onDrop}
 		>
 			{/* Selections section */}
 			{showSelections && selections && setSelections && (
@@ -400,18 +420,25 @@ export const VoidChatArea: React.FC<VoidChatAreaProps> = ({
 
 			{/* Bottom row */}
 			<div className='flex flex-row justify-between items-end gap-1'>
-				{showModelDropdown && (
-					<div className='flex flex-col gap-y-1'>
-						<ReasoningOptionSlider featureName={featureName} />
+			{showModelDropdown && (
+				<div className="flex flex-col gap-y-1">
+					<ReasoningOptionSlider featureName={featureName} />
 
-						<div className='flex items-center flex-wrap gap-x-2 gap-y-1 text-nowrap '>
-							{featureName === 'Chat' && <ChatModeDropdown className='text-xs text-void-fg-3 bg-void-bg-1 border border-void-border-2 rounded py-0.5 px-1' />}
-							<ModelDropdown featureName={featureName} className='text-xs text-void-fg-3 bg-void-bg-1 rounded' />
-						</div>
+					<div className="flex items-center flex-wrap gap-x-2 gap-y-1 text-nowrap">
+					{featureName === 'Chat' && (
+						<ChatModeDropdown className="text-xs text-void-fg-3 bg-transparent p-0 min-w-[100px]" />
+					)}
+					<ModelDropdown
+						featureName={featureName}
+						className="text-xs text-void-fg-3 bg-transparent p-0"
+					/>
 					</div>
+				</div>
 				)}
 
 				<div className="flex items-center gap-2">
+
+					{imageButton}
 
 					{isStreaming && loadingIcon}
 
@@ -449,6 +476,22 @@ export const ButtonSubmit = ({ className, disabled, ...props }: ButtonProps & Re
 		{...props}
 	>
 		<IconArrowUp size={DEFAULT_BUTTON_SIZE} className="stroke-[2] p-[2px]" />
+	</button>
+}
+
+export const ButtonAddImage = ({ className, onClick, ...props }: ButtonHTMLAttributes<HTMLButtonElement>) => {
+	return <button
+		type='button'
+		className={`rounded-full flex-shrink-0 flex-grow-0 cursor-pointer flex items-center justify-center
+			bg-void-bg-3 hover:bg-void-bg-2 text-void-fg-3 hover:text-void-fg-2
+			transition-all duration-200 hover:scale-105 active:scale-95
+			${className}
+		`}
+		onClick={onClick}
+		{...props}
+		title="Add image (or drag & drop)"
+	>
+		<ImageIcon size={DEFAULT_BUTTON_SIZE} className="stroke-[2] p-[2px]" />
 	</button>
 }
 
@@ -795,6 +838,7 @@ type ToolHeaderParams = {
 	desc2OnClick?: () => void;
 	isOpen?: boolean;
 	className?: string;
+	isRunning?: boolean;
 }
 
 export const ToolHeaderWrapper = ({
@@ -816,6 +860,7 @@ export const ToolHeaderWrapper = ({
 	isOpen,
 	isRejected,
 	className,
+	isRunning = false,
 }: ToolHeaderParams) => {
 	const [isOpen_, setIsOpen] = useState(false);
 
@@ -824,10 +869,13 @@ export const ToolHeaderWrapper = ({
 	const isClickable = !!(isDropdown || onClick);
 	const isDesc1Clickable = !!desc1OnClick;
 
+	// Detect if running from icon tooltip (fallback detection)
+	const detectedIsRunning = iconTooltip === 'Running...' || isRunning;
+
 	const desc1HTML = (
 		<span
-			className={`ml-2 text-xs italic truncate text-gray-400 dark:text-gray-500
-				${isDesc1Clickable ? 'cursor-pointer hover:text-gray-300 transition-colors duration-150' : ''}
+			className={`ml-1 text-[9px] italic truncate text-void-fg-4
+				${isDesc1Clickable ? 'cursor-pointer' : ''}
 			`}
 			onClick={desc1OnClick}
 			{...desc1Info
@@ -850,62 +898,73 @@ export const ToolHeaderWrapper = ({
 		? {
 				'data-tooltip-id': 'void-tooltip',
 				'data-tooltip-content': iconTooltip,
-				'data-tooltip-place': 'top',
+				'data-tooltip-place': 'top' as const,
 		  }
 		: {};
 
 	return (
-		<div className={`w-full ${className}`}>
+		<div className={`w-full relative ${className || ''}`}>
+
 			{/* header */}
 			<div
-				className={`flex items-center justify-between select-none
-					${isRejected ? 'line-through opacity-60' : ''}
+				className={`relative flex items-center justify-between select-none
+					${isRejected ? 'line-through opacity-50' : ''}
 				`}
 			>
-				{/* left section */}
-				<div className="flex items-center gap-2 overflow-hidden min-w-0">
+			{/* left section */}
+			<div className="flex items-center gap-1 overflow-hidden min-w-0">
 				{/* clickable title section */}
 				<div
-					className={`flex items-center gap-1 min-w-0 overflow-hidden
-						${isClickable ? 'cursor-pointer hover:text-blue-500 dark:hover:text-blue-400 transition-colors duration-150' : ''}
+					className={`flex items-center gap-0.5 min-w-0 overflow-hidden
+						${isClickable ? 'cursor-pointer' : ''}
 					`}
 					onClick={() => {
 						if (isDropdown) setIsOpen((v) => !v);
 						if (onClick) onClick();
 					}}
 				>
-						{isDropdown && (
-							<ChevronRight
-								className={`h-4 w-4 text-gray-500 dark:text-gray-400 transition-transform duration-200 ease-in-out ${
-									isExpanded ? 'rotate-90' : ''
-								}`}
-							/>
-						)}
-				{icon && (
-					<span
-						className="flex items-center justify-center text-gray-500 dark:text-gray-400"
-						{...iconTooltipProps}
-					>
-						{icon}
-					</span>
-				)}
+					{isDropdown && (
+						<ChevronRight
+							className={`h-2.5 w-2.5 text-void-fg-4 transition-transform duration-150 ease-in-out ${
+								isExpanded ? 'rotate-90' : ''
+							}`}
+						/>
+					)}
+					{icon && (
+						<span
+							className="flex items-center justify-center text-void-fg-4"
+							{...iconTooltipProps}
+						>
+							{icon}
+						</span>
+					)}
 
-					<span className="font-medium text-sm text-gray-800 dark:text-gray-200 truncate">
-						{title}
-					</span>
+					{detectedIsRunning && typeof title === 'string' ? (
+						<TextShimmer
+							className="font-medium text-[10px] text-void-fg-3 truncate"
+							duration={1.5}
+							spread={3}
+						>
+							{title}
+						</TextShimmer>
+					) : (
+						<span className="font-medium text-[10px] text-void-fg-3 truncate">
+							{title}
+						</span>
+					)}
 
-						{!isDesc1Clickable && desc1HTML}
-					</div>
-
-					{isDesc1Clickable && desc1HTML}
+					{!isDesc1Clickable && desc1HTML}
 				</div>
 
-				{/* right section */}
-				<div className="flex items-center gap-2 flex-shrink-0 text-xs text-gray-500 dark:text-gray-400">
+				{isDesc1Clickable && desc1HTML}
+			</div>
+
+			{/* right section */}
+			<div className="flex items-center gap-1 flex-shrink-0 text-[9px] text-void-fg-4">
 					{info && (
 						<CircleEllipsis
-							className="opacity-70"
-							size={14}
+							className="opacity-60"
+							size={10}
 							data-tooltip-id="void-tooltip"
 							data-tooltip-content={info}
 							data-tooltip-place="top-end"
@@ -914,8 +973,8 @@ export const ToolHeaderWrapper = ({
 
 					{showErrorBadge && (
 						<AlertTriangle
-							className="text-yellow-500 dark:text-yellow-400"
-							size={14}
+							className="text-void-fg-4 opacity-70"
+							size={10}
 							data-tooltip-id="void-tooltip"
 							data-tooltip-content={'Error running tool'}
 							data-tooltip-place="top"
@@ -923,8 +982,8 @@ export const ToolHeaderWrapper = ({
 					)}
 					{showRejectedBadge && (
 						<Ban
-							className="text-gray-400 dark:text-gray-500"
-							size={14}
+							className="text-void-fg-4 opacity-60"
+							size={10}
 							data-tooltip-id="void-tooltip"
 							data-tooltip-content={'Canceled'}
 							data-tooltip-place="top"
@@ -934,14 +993,14 @@ export const ToolHeaderWrapper = ({
 					{desc2 && (
 						<span
 							onClick={desc2OnClick}
-							className="cursor-pointer hover:text-blue-500 dark:hover:text-blue-400 transition-colors"
+							className="cursor-pointer"
 						>
 							{desc2}
 						</span>
 					)}
 
 					{numResults !== undefined && (
-						<span className="ml-1 text-gray-400 dark:text-gray-500">
+						<span className="ml-0.5 text-void-fg-4 opacity-70">
 							{`${numResults}${hasNextPage ? '+' : ''} result${
 								numResults !== 1 ? 's' : ''
 							}`}
@@ -952,8 +1011,8 @@ export const ToolHeaderWrapper = ({
 
 	{/* collapsible children */}
 	<div
-		className={`overflow-hidden text-gray-500 dark:text-gray-400 transition-all duration-200 ease-in-out
-			${isExpanded ? 'opacity-100 py-1' : 'opacity-0 max-h-0'}
+		className={`overflow-hidden text-void-fg-4 transition-all duration-200 ease-in-out
+			${isExpanded ? 'opacity-100' : 'opacity-0 max-h-0'}
 		`}
 	>
 		{children}
@@ -972,12 +1031,16 @@ const EditTool = ({ toolMessage, threadId, messageIdx, content }: Parameters<Res
 	const isRejected = toolMessage.type === 'rejected'
 
 	const title = getTitle(toolMessage)
-
-	const { desc1, desc1Info } = toolNameToDesc(toolMessage.name, toolMessage.params, accessor)
+	const { desc1, desc1Info } = toolNameToDesc(toolMessage.name, toolMessage.params, accessor, toolMessage.rawParams)
 	const statusIconMeta = getToolStatusIconMeta(toolMessage)
 
 	const { rawParams, params, name } = toolMessage
-	const desc1OnClick = () => voidOpenFileFn(params.uri, accessor)
+	const desc1OnClick = params?.uri ? () => voidOpenFileFn(params.uri, accessor) : undefined
+	const isRunning = toolMessage.type === 'running_now' || toolMessage.type === 'tool_request'
+
+	const editToolType = toolMessage.name === 'edit_file' ? 'diff' : 'rewrite'
+	const isEditRunning = isRunning
+
 	const componentParams: ToolHeaderParams = {
 		title,
 		desc1,
@@ -987,60 +1050,75 @@ const EditTool = ({ toolMessage, threadId, messageIdx, content }: Parameters<Res
 		isRejected,
 		icon: statusIconMeta?.icon,
 		iconTooltip: statusIconMeta?.tooltip,
+		isRunning,
 	}
 
-
-	const editToolType = toolMessage.name === 'edit_file' ? 'diff' : 'rewrite'
-	if (toolMessage.type === 'running_now' || toolMessage.type === 'tool_request') {
-		componentParams.children = <ToolChildrenWrapper className='bg-void-bg-3'>
-			<EditToolChildren
-				uri={params.uri}
-				code={content}
-				type={editToolType}
-			/>
-		</ToolChildrenWrapper>
-		// JumpToFileButton removed in favor of FileLinkText
+	// Handle running state
+	if (isEditRunning && params?.uri) {
+		componentParams.children = (
+			<EditToolCardWrapper isRunning={true}>
+				<ToolChildrenWrapper>
+					<EditToolChildren
+						uri={params.uri}
+						code={content}
+						type={editToolType}
+					/>
+				</ToolChildrenWrapper>
+			</EditToolCardWrapper>
+		)
 	}
+	// Handle completed states
 	else if (toolMessage.type === 'success' || toolMessage.type === 'rejected' || toolMessage.type === 'tool_error') {
-		// add apply box
-		const applyBoxId = getApplyBoxId({
-			threadId: threadId,
-			messageIdx: messageIdx,
-			tokenIdx: 'N/A',
-		})
-		componentParams.desc2 = <EditToolHeaderButtons
-			applyBoxId={applyBoxId}
-			uri={params.uri}
-			codeStr={content}
-			toolName={name}
-			threadId={threadId}
-		/>
+		if (params?.uri) {
+			const applyBoxId = getApplyBoxId({
+				threadId: threadId,
+				messageIdx: messageIdx,
+				tokenIdx: 'N/A',
+			})
+			componentParams.desc2 = (
+				<EditToolHeaderButtons
+					applyBoxId={applyBoxId}
+					uri={params.uri}
+					codeStr={content}
+					toolName={name}
+					threadId={threadId}
+				/>
+			)
 
-		// add children
-		componentParams.children = <ToolChildrenWrapper className='bg-void-bg-3'>
-			<EditToolChildren
-				uri={params.uri}
-				code={content}
-				type={editToolType}
-			/>
-		</ToolChildrenWrapper>
-
-		if (toolMessage.type === 'success' || toolMessage.type === 'rejected') {
-			const { result } = toolMessage
-			componentParams.bottomChildren = <BottomChildren title='Lint errors'>
-				{result?.lintErrors?.map((error, i) => (
-					<div key={i} className='whitespace-nowrap'>Lines {error.startLineNumber}-{error.endLineNumber}: {error.message}</div>
-				))}
-			</BottomChildren>
+			componentParams.children = (
+				<EditToolCardWrapper isRunning={false}>
+					<ToolChildrenWrapper>
+						<EditToolChildren
+							uri={params.uri}
+							code={content}
+							type={editToolType}
+						/>
+					</ToolChildrenWrapper>
+				</EditToolCardWrapper>
+			)
 		}
+
+		// Handle lint errors for success/rejected
+		if ((toolMessage.type === 'success' || toolMessage.type === 'rejected') && toolMessage.result?.lintErrors) {
+			componentParams.bottomChildren = (
+				<BottomChildren title='Lint errors'>
+					{toolMessage.result.lintErrors.map((error, i) => (
+						<div key={i} className='whitespace-nowrap'>
+							Lines {error.startLineNumber}-{error.endLineNumber}: {error.message}
+						</div>
+					))}
+				</BottomChildren>
+			)
+		}
+		// Handle tool errors
 		else if (toolMessage.type === 'tool_error') {
-			// error
-			const { result } = toolMessage
-			componentParams.bottomChildren = <BottomChildren title='Error'>
-				<CodeChildren>
-					{result}
-				</CodeChildren>
-			</BottomChildren>
+			componentParams.bottomChildren = (
+				<BottomChildren title='Error'>
+					<CodeChildren>
+						{toolMessage.result}
+					</CodeChildren>
+				</BottomChildren>
+			)
 		}
 	}
 
@@ -1116,6 +1194,7 @@ const UserMessageComponent = ({ chatMessage, messageIdx, isCheckpointGhost, curr
 	const [isDisabled, setIsDisabled] = useState(false)
 	const [textAreaRefState, setTextAreaRef] = useState<HTMLTextAreaElement | null>(null)
 	const textAreaFnsRef = useRef<TextAreaFns | null>(null)
+	const [editImages, setEditImages] = useState<string[]>([])
 	// initialize on first render, and when edit was just enabled
 	const _mustInitialize = useRef(true)
 	const _justEnabledEdit = useRef(false)
@@ -1129,6 +1208,9 @@ const UserMessageComponent = ({ chatMessage, messageIdx, isCheckpointGhost, curr
 					else return s
 				})
 			)
+
+			// Initialize images for edit mode
+			setEditImages(chatMessage.images || [])
 
 			if (textAreaFnsRef.current)
 				textAreaFnsRef.current.setValue(chatMessage.displayContent || '')
@@ -1156,11 +1238,59 @@ const UserMessageComponent = ({ chatMessage, messageIdx, isCheckpointGhost, curr
 
 	const EditSymbol = mode === 'display' ? Pencil : X
 
+	// Hooks must not be conditional: define edit image handlers outside mode branches
+	const handleEditImageSelect = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+		const files = e.target.files
+		if (!files || files.length === 0) return
+
+		const imagePromises: Promise<string>[] = []
+		for (let i = 0; i < files.length; i++) {
+			const file = files[i]
+			if (!file.type.startsWith('image/')) continue
+
+			const promise = new Promise<string>((resolve, reject) => {
+				const reader = new FileReader()
+				reader.onload = (event) => {
+					const dataUrl = event.target?.result as string
+					resolve(dataUrl)
+				}
+				reader.onerror = reject
+				reader.readAsDataURL(file)
+			})
+			imagePromises.push(promise)
+		}
+
+		Promise.all(imagePromises).then((dataUrls) => {
+			setEditImages(prev => [...prev, ...dataUrls])
+		}).catch((error) => {
+			console.error('Error reading image files:', error)
+		})
+
+		e.target.value = ''
+	}, [])
+
+	const removeEditImage = useCallback((index: number) => {
+		setEditImages(prev => prev.filter((_, i) => i !== index))
+	}, [])
+
 
 	let chatbubbleContents: React.ReactNode
 	if (mode === 'display') {
 		chatbubbleContents = <>
 			<SelectedFiles type='past' messageIdx={messageIdx} selections={chatMessage.selections || []} />
+			{/* Display images if present */}
+			{chatMessage.images && chatMessage.images.length > 0 && (
+				<div className='flex flex-wrap gap-1.5 px-0.5 mb-1'>
+					{chatMessage.images.map((imageUrl, index) => (
+						<img
+							key={index}
+							src={imageUrl}
+							alt={`Image ${index + 1}`}
+							className='w-12 h-12 object-cover rounded border border-void-border-3 shadow-sm'
+						/>
+					))}
+				</div>
+			)}
 			<span className='px-0.5'>{chatMessage.displayContent}</span>
 		</>
 	}
@@ -1184,6 +1314,8 @@ const UserMessageComponent = ({ chatMessage, messageIdx, isCheckpointGhost, curr
 			// stream the edit
 			const userMessage = textAreaRefState.value;
 			try {
+				// Images are preserved from the original message when editing
+				// The editUserMessageAndStreamResponse method automatically preserves images
 				await chatThreadsService.editUserMessageAndStreamResponse({ userMessage, messageIdx, threadId })
 			} catch (e) {
 				console.error('Error while editing message:', e)
@@ -1238,6 +1370,45 @@ const UserMessageComponent = ({ chatMessage, messageIdx, isCheckpointGhost, curr
 				fnsRef={textAreaFnsRef}
 				multiline={true}
 			/>
+
+			{/* Image upload and preview for edit mode */}
+			<div className='flex flex-col gap-1 mt-1'>
+				{editImages.length > 0 && (
+					<div className='flex flex-wrap gap-1.5'>
+						{editImages.map((imageUrl, index) => (
+							<div key={index} className='relative'>
+								<img
+									src={imageUrl}
+									alt={`Edit ${index + 1}`}
+									className='w-12 h-12 object-cover rounded border border-void-border-3 shadow-sm'
+								/>
+								<button
+									type='button'
+									onClick={() => removeEditImage(index)}
+									className='absolute -top-1 -right-1 bg-void-bg-3 rounded-full p-0.5 hover:brightness-125 cursor-pointer shadow-sm'
+								>
+									<IconX size={12} className='stroke-[2]' />
+								</button>
+							</div>
+						))}
+					</div>
+				)}
+				<label className='cursor-pointer text-xs text-void-fg-3 hover:text-void-fg-2 inline-flex items-center gap-1'>
+					<input
+						type='file'
+						accept='image/*'
+						multiple
+						onChange={handleEditImageSelect}
+						className='hidden'
+					/>
+					<svg width={14} height={14} viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth={2}>
+						<rect x='3' y='3' width='18' height='18' rx='2' ry='2' />
+						<circle cx='8.5' cy='8.5' r='1.5' />
+						<polyline points='21 15 16 10 5 21' />
+					</svg>
+					Add image{editImages.length > 0 ? ` (${editImages.length})` : ''}
+				</label>
+			</div>
 		</VoidChatArea>
 	}
 
@@ -1303,59 +1474,78 @@ const UserMessageComponent = ({ chatMessage, messageIdx, isCheckpointGhost, curr
 
 const SmallProseWrapper = ({ children }: { children: React.ReactNode }) => {
 	return <div className='
-text-void-fg-4
+text-void-fg-3
 prose
 prose-sm
 break-words
 max-w-none
-leading-snug
+leading-relaxed
 text-[13px]
 
 [&>:first-child]:!mt-0
 [&>:last-child]:!mb-0
 
 prose-h1:text-[14px]
-prose-h1:my-4
+prose-h1:my-3
+prose-h1:leading-tight
+prose-h1:text-void-fg-2
 
 prose-h2:text-[13px]
-prose-h2:my-4
+prose-h2:my-3
+prose-h2:leading-tight
+prose-h2:text-void-fg-2
 
 prose-h3:text-[13px]
-prose-h3:my-3
+prose-h3:my-2.5
+prose-h3:leading-tight
+prose-h3:text-void-fg-2
 
 prose-h4:text-[13px]
 prose-h4:my-2
+prose-h4:leading-tight
+prose-h4:text-void-fg-2
 
 prose-p:my-2
-prose-p:leading-snug
+prose-p:leading-relaxed
 prose-hr:my-2
+prose-hr:border-void-border-3/20
 
 prose-ul:my-2
 prose-ul:pl-4
 prose-ul:list-outside
 prose-ul:list-disc
-prose-ul:leading-snug
-
+prose-ul:leading-relaxed
 
 prose-ol:my-2
 prose-ol:pl-4
 prose-ol:list-outside
 prose-ol:list-decimal
-prose-ol:leading-snug
+prose-ol:leading-relaxed
 
 marker:text-inherit
 
 prose-blockquote:pl-2
 prose-blockquote:my-2
+prose-blockquote:border-l-2
+prose-blockquote:border-l-void-border-3/30
+prose-blockquote:italic
 
-prose-code:text-void-fg-3
+prose-code:text-void-fg-2
 prose-code:text-[12px]
+prose-code:bg-void-bg-2-alt/40
+prose-code:px-1
+prose-code:py-0.5
+prose-code:rounded
 prose-code:before:content-none
 prose-code:after:content-none
 
 prose-pre:text-[12px]
 prose-pre:p-2
 prose-pre:my-2
+prose-pre:bg-void-bg-2-alt/50
+prose-pre:border
+prose-pre:border-void-border-3/20
+prose-pre:rounded
 
 prose-table:text-[13px]
 '>
@@ -1365,27 +1555,48 @@ prose-table:text-[13px]
 
 const ProseWrapper = ({ children }: { children: React.ReactNode }) => {
 	return <div className='
-text-void-fg-2
+text-void-fg-1
 prose
 prose-sm
 break-words
 prose-p:block
+prose-p:leading-relaxed
+prose-p:my-2.5
 prose-hr:my-4
+prose-hr:border-void-border-3/30
 prose-pre:my-2
+prose-pre:bg-void-bg-2-alt/50
+prose-pre:border
+prose-pre:border-void-border-3/20
+prose-pre:rounded
 marker:text-inherit
 prose-ol:list-outside
 prose-ol:list-decimal
+prose-ol:leading-relaxed
+prose-ol:my-2
 prose-ul:list-outside
 prose-ul:list-disc
-prose-li:my-0
+prose-ul:leading-relaxed
+prose-ul:my-2
+prose-li:my-1
 prose-code:before:content-none
 prose-code:after:content-none
+prose-code:text-void-fg-1
+prose-code:bg-void-bg-2-alt/40
+prose-code:px-1
+prose-code:py-0.5
+prose-code:rounded
 prose-headings:prose-sm
 prose-headings:font-bold
-
-prose-p:leading-normal
-prose-ol:leading-normal
-prose-ul:leading-normal
+prose-headings:text-void-fg-1
+prose-headings:my-3
+prose-headings:leading-tight
+prose-blockquote:border-l-2
+prose-blockquote:border-l-void-border-1/50
+prose-blockquote:pl-3
+prose-blockquote:my-3
+prose-blockquote:italic
+prose-blockquote:text-void-fg-2
 
 max-w-none
 '
@@ -1412,10 +1623,10 @@ const AssistantMessageComponent = ({ chatMessage, isCheckpointGhost, isCommitted
 	const isEmpty = !chatMessage.displayContent && !chatMessage.reasoning
 	if (isEmpty) return null
 
-	return <>
+	return <div className={`w-full ${isCheckpointGhost ? 'opacity-50' : ''}`}>
 		{/* reasoning token */}
 		{hasReasoning &&
-			<div className={`${isCheckpointGhost ? 'opacity-50' : ''}`}>
+			<div className={`mb-3 last:mb-0 ${isCheckpointGhost ? 'opacity-50' : ''}`}>
 				<ReasoningWrapper isDoneReasoning={isDoneReasoning} isStreaming={!isCommitted}>
 					<SmallProseWrapper>
 						<ChatMarkdownRender
@@ -1431,7 +1642,7 @@ const AssistantMessageComponent = ({ chatMessage, isCheckpointGhost, isCommitted
 
 		{/* assistant message */}
 		{chatMessage.displayContent &&
-			<div className={`${isCheckpointGhost ? 'opacity-50' : ''}`}>
+			<div className={isCheckpointGhost ? 'opacity-50' : ''}>
 				<ProseWrapper>
 					<ChatMarkdownRender
 						string={chatMessage.displayContent || ''}
@@ -1442,7 +1653,7 @@ const AssistantMessageComponent = ({ chatMessage, isCheckpointGhost, isCommitted
 				</ProseWrapper>
 			</div>
 		}
-	</>
+	</div>
 
 }
 
@@ -1469,6 +1680,16 @@ const ReasoningWrapper = ({ isDoneReasoning, isStreaming, children }: { isDoneRe
 // should either be past or "-ing" tense, not present tense. Eg. when the LLM searches for something, the user expects it to say "I searched for X" or "I am searching for X". Not "I search X".
 
 const loadingTitleWrapper = (item: React.ReactNode): React.ReactNode => {
+	// Only apply shimmer if item is a string
+	if (typeof item === 'string') {
+		return <TextShimmer
+			className="flex items-center flex-nowrap"
+			duration={1.5}
+			spread={3}
+		>
+			{item}
+		</TextShimmer>
+	}
 	return <span className='flex items-center flex-nowrap'>
 		{item}
 	</span>
@@ -1499,25 +1720,19 @@ type ToolStatusIconMeta = {
 	tooltip: string;
 }
 
-const TOOL_STATUS_ICON_SIZE = 14
+const TOOL_STATUS_ICON_SIZE = 12
 
 const getToolStatusIconMeta = (toolMessage: Pick<ChatMessage & { role: 'tool' }, 'name' | 'type' | 'mcpServerName'>): ToolStatusIconMeta | null => {
 	switch (toolMessage.type) {
 		case 'running_now':
-			return {
-				icon: <CircleSpinner size={TOOL_STATUS_ICON_SIZE} className='text-void-fg-3 flex-shrink-0' />,
-				tooltip: 'Running...',
-			}
+			return null
 		case 'tool_request':
 			return {
 				icon: <CirclePlus size={TOOL_STATUS_ICON_SIZE} className='text-void-fg-3 flex-shrink-0' />,
 				tooltip: 'Waiting for approval',
 			}
 		case 'success':
-			return {
-				icon: <Check size={TOOL_STATUS_ICON_SIZE} style={{ color: acceptBorder }} className='flex-shrink-0' />,
-				tooltip: 'Completed',
-			}
+			return null
 		case 'tool_error':
 		case 'invalid_params':
 			return {
@@ -1567,12 +1782,182 @@ const getTitle = (toolMessage: Pick<ChatMessage & { role: 'tool' }, 'name' | 'ty
 }
 
 
-const toolNameToDesc = (toolName: BuiltinToolName, _toolParams: BuiltinToolCallParams[BuiltinToolName] | undefined, accessor: ReturnType<typeof useAccessor>): {
+const toolNameToDesc = (toolName: BuiltinToolName, _toolParams: BuiltinToolCallParams[BuiltinToolName] | undefined, accessor: ReturnType<typeof useAccessor>, rawParams?: RawToolParamsObj): {
 	desc1: React.ReactNode,
 	desc1Info?: string,
 } => {
 
-	if (!_toolParams) {
+	if (!_toolParams || (typeof _toolParams === 'object' && _toolParams !== null && !(_toolParams instanceof URI) && Object.keys(_toolParams).length === 0)) {
+		// If params is empty, try to extract basic info from rawParams for display
+		if (rawParams) {
+			const x = {
+				'read_file': () => {
+					const uriStr = rawParams.uri as string | undefined
+					if (uriStr) {
+						try {
+							const uri = URI.parse(uriStr)
+							return {
+								desc1: getBasename(uri.fsPath),
+								desc1Info: getRelative(uri, accessor),
+							};
+						} catch {
+							return { desc1: uriStr }
+						}
+					}
+					return { desc1: '' }
+				},
+				'ls_dir': () => {
+					const uriStr = rawParams.uri as string | undefined
+					if (uriStr) {
+						try {
+							const uri = URI.parse(uriStr)
+							return {
+								desc1: getFolderName(uri.fsPath),
+								desc1Info: getRelative(uri, accessor),
+							};
+						} catch {
+							return { desc1: uriStr }
+						}
+					}
+					return { desc1: '' }
+				},
+				'get_dir_tree': () => {
+					const uriStr = rawParams.uri as string | undefined
+					if (uriStr) {
+						try {
+							const uri = URI.parse(uriStr)
+							return {
+								desc1: getFolderName(uri.fsPath) ?? '/',
+								desc1Info: getRelative(uri, accessor),
+							}
+						} catch {
+							return { desc1: uriStr }
+						}
+					}
+					return { desc1: '' }
+				},
+				'search_pathnames_only': () => {
+					const query = rawParams.query as string | undefined
+					return { desc1: query ? `"${query}"` : '' }
+				},
+				'search_for_files': () => {
+					const query = rawParams.query as string | undefined
+					return { desc1: query ? `"${query}"` : '' }
+				},
+				'search_in_file': () => {
+					const query = rawParams.query as string | undefined
+					const uriStr = rawParams.uri as string | undefined
+					let desc1Info: string | undefined
+					if (uriStr) {
+						try {
+							const uri = URI.parse(uriStr)
+							desc1Info = getRelative(uri, accessor)
+						} catch {}
+					}
+					return {
+						desc1: query ? `"${query}"` : '',
+						desc1Info,
+					};
+				},
+				'create_file_or_folder': () => {
+					const uriStr = rawParams.uri as string | undefined
+					const isFolder = rawParams.is_folder as boolean | undefined
+					if (uriStr) {
+						try {
+							const uri = URI.parse(uriStr)
+							return {
+								desc1: isFolder ? (getFolderName(uri.fsPath) ?? '/') : getBasename(uri.fsPath),
+								desc1Info: getRelative(uri, accessor),
+							}
+						} catch {
+							return { desc1: uriStr }
+						}
+					}
+					return { desc1: '' }
+				},
+				'delete_file_or_folder': () => {
+					const uriStr = rawParams.uri as string | undefined
+					const isFolder = rawParams.is_folder as boolean | undefined
+					if (uriStr) {
+						try {
+							const uri = URI.parse(uriStr)
+							return {
+								desc1: isFolder ? (getFolderName(uri.fsPath) ?? '/') : getBasename(uri.fsPath),
+								desc1Info: getRelative(uri, accessor),
+							}
+						} catch {
+							return { desc1: uriStr }
+						}
+					}
+					return { desc1: '' }
+				},
+				'rewrite_file': () => {
+					const uriStr = rawParams.uri as string | undefined
+					if (uriStr) {
+						try {
+							const uri = URI.parse(uriStr)
+							return {
+								desc1: getBasename(uri.fsPath),
+								desc1Info: getRelative(uri, accessor),
+							}
+						} catch {
+							return { desc1: uriStr }
+						}
+					}
+					return { desc1: '' }
+				},
+				'edit_file': () => {
+					const uriStr = rawParams.uri as string | undefined
+					if (uriStr) {
+						try {
+							const uri = URI.parse(uriStr)
+							return {
+								desc1: getBasename(uri.fsPath),
+								desc1Info: getRelative(uri, accessor),
+							}
+						} catch {
+							return { desc1: uriStr }
+						}
+					}
+					return { desc1: '' }
+				},
+				'run_command': () => {
+					const command = rawParams.command as string | undefined
+					return { desc1: command ? `"${command}"` : '' }
+				},
+				'run_persistent_command': () => {
+					const command = rawParams.command as string | undefined
+					return { desc1: command ? `"${command}"` : '' }
+				},
+				'open_persistent_terminal': () => {
+					return { desc1: '' }
+				},
+				'kill_persistent_terminal': () => {
+					const id = rawParams.persistent_terminal_id as string | undefined
+					return { desc1: id || '' }
+				},
+				'read_lint_errors': () => {
+					const uriStr = rawParams.uri as string | undefined
+					if (uriStr) {
+						try {
+							const uri = URI.parse(uriStr)
+							return {
+								desc1: getBasename(uri.fsPath),
+								desc1Info: getRelative(uri, accessor),
+							}
+						} catch {
+							return { desc1: uriStr }
+						}
+					}
+					return { desc1: '' }
+				}
+			}
+			try {
+				return x[toolName]?.() || { desc1: '' }
+			} catch {
+				return { desc1: '' }
+			}
+		}
 		return { desc1: '', };
 	}
 
@@ -1709,12 +2094,12 @@ const ToolRequestAcceptRejectButtons = ({ toolName }: { toolName: ToolName }) =>
 		<button
 			onClick={onAccept}
 			className={`
-                px-2 py-1
+                px-1.5 py-0.5
                 bg-[var(--vscode-button-background)]
                 text-[var(--vscode-button-foreground)]
                 hover:bg-[var(--vscode-button-hoverBackground)]
                 rounded
-                text-sm font-medium
+                text-xs font-medium
             `}
 		>
 			Approve
@@ -1725,12 +2110,12 @@ const ToolRequestAcceptRejectButtons = ({ toolName }: { toolName: ToolName }) =>
 		<button
 			onClick={onReject}
 			className={`
-                px-2 py-1
+                px-1.5 py-0.5
                 bg-[var(--vscode-button-secondaryBackground)]
                 text-[var(--vscode-button-secondaryForeground)]
                 hover:bg-[var(--vscode-button-secondaryHoverBackground)]
                 rounded
-                text-sm font-medium
+                text-xs font-medium
             `}
 		>
 			Cancel
@@ -1738,26 +2123,61 @@ const ToolRequestAcceptRejectButtons = ({ toolName }: { toolName: ToolName }) =>
 	)
 
 	const approvalType = isABuiltinToolName(toolName) ? approvalTypeOfBuiltinToolName[toolName] : 'MCP tools'
-	const approvalToggle = approvalType ? <div key={approvalType} className="flex items-center ml-2 gap-x-1">
+	const approvalToggle = approvalType ? <div key={approvalType} className="flex items-center ml-1.5 gap-x-1">
 		<ToolApprovalTypeSwitch size='xs' approvalType={approvalType} desc={`Auto-approve ${approvalType}`} />
 	</div> : null
 
-	return <div className="flex gap-2 mx-0.5 items-center">
+	return <div className="flex gap-1.5 mx-0.5 items-center">
 		{approveButton}
 		{cancelButton}
 		{approvalToggle}
 	</div>
 }
 
+export const EditToolCardWrapper = ({ children, isRunning }: { children: React.ReactNode, isRunning?: boolean }) => (
+	<div className="relative bg-void-bg-3 rounded-sm">
+		{isRunning && (
+			<>
+				<div className="absolute inset-0 pointer-events-none rounded-sm border-sweep-animation" />
+				<style>{`
+					.border-sweep-animation {
+						border: 1px solid transparent;
+						background:
+							linear-gradient(var(--vscode-void-bg-3), var(--vscode-void-bg-3)) padding-box,
+							linear-gradient(90deg, transparent 0%, rgba(96, 165, 250, 0.4) 25%, rgba(96, 165, 250, 0.6) 50%, rgba(96, 165, 250, 0.4) 75%, transparent 100%) border-box;
+						background-size: 100% 100%, 250% 100%;
+						animation: border-sweep 3s linear infinite;
+					}
+					@keyframes border-sweep {
+						from { background-position: 0 0, 250% 0; }
+						to { background-position: 0 0, -250% 0; }
+					}
+					@keyframes fadeInDropdown {
+						from {
+							opacity: 0;
+							transform: scale(0.95);
+						}
+						to {
+							opacity: 1;
+							transform: scale(1);
+						}
+					}
+				`}</style>
+			</>
+		)}
+		{children}
+	</div>
+);
+
 export const ToolChildrenWrapper = ({ children, className }: { children: React.ReactNode, className?: string }) => {
 	return <div className={`${className ? className : ''} cursor-default select-none`}>
-		<div className='px-2 min-w-full overflow-hidden'>
+		<div className='px-1.5 min-w-full overflow-hidden'>
 			{children}
 		</div>
 	</div>
 }
 export const CodeChildren = ({ children, className }: { children: React.ReactNode, className?: string }) => {
-	return <div className={`${className ?? ''} p-1 rounded-sm overflow-auto text-sm`}>
+	return <div className={`${className ?? ''} p-0.5 rounded-sm overflow-auto text-xs`}>
 		<div className='!select-text cursor-auto'>
 			{children}
 		</div>
@@ -1773,8 +2193,8 @@ export const ListableToolItem = ({ name, onClick, isSmall, className, showDot }:
 			`}
 		onClick={onClick}
 	>
-		{showDot === false ? null : <div className="flex-shrink-0"><svg className="w-1 h-1 opacity-60 mr-1.5 fill-current" viewBox="0 0 100 40"><rect x="0" y="15" width="100" height="10" /></svg></div>}
-		<div className={`${isSmall ? 'italic text-void-fg-4 flex items-center' : ''}`}>{name}</div>
+		{showDot === false ? null : <div className="flex-shrink-0"><svg className="w-0.5 h-0.5 opacity-60 mr-1 fill-current" viewBox="0 0 100 40"><rect x="0" y="15" width="100" height="10" /></svg></div>}
+		<div className={`text-xs ${isSmall ? 'italic text-void-fg-4 flex items-center' : ''}`}>{name}</div>
 	</div>
 }
 
@@ -1796,7 +2216,7 @@ const EditToolChildren = ({ uri, code, type }: { uri: URI | undefined, code: str
 
 
 const LintErrorChildren = ({ lintErrors }: { lintErrors: LintErrorItem[] }) => {
-	return <div className="text-xs text-void-fg-4 opacity-80 border-l-2 border-void-warning px-2 py-0.5 flex flex-col gap-0.5 overflow-x-auto whitespace-nowrap">
+	return <div className="text-[10px] text-void-fg-4 opacity-80 border-l-2 border-void-warning px-1.5 py-0.5 flex flex-col gap-0.5 overflow-x-auto whitespace-nowrap">
 		{lintErrors.map((error, i) => (
 			<div key={i}>Lines {error.startLineNumber}-{error.endLineNumber}: {error.message}</div>
 		))}
@@ -1807,21 +2227,21 @@ const BottomChildren = ({ children, title }: { children: React.ReactNode, title:
 	const [isOpen, setIsOpen] = useState(false);
 	if (!children) return null;
 	return (
-		<div className="w-full px-2 mt-0.5">
+		<div className="w-full px-1.5 mt-0.5">
 			<div
 				className={`flex items-center cursor-pointer select-none transition-colors duration-150 pl-0 py-0.5 rounded group`}
 				onClick={() => setIsOpen(o => !o)}
 				style={{ background: 'none' }}
 			>
 				<ChevronRight
-					className={`mr-1 h-3 w-3 flex-shrink-0 transition-transform duration-100 text-void-fg-4 group-hover:text-void-fg-3 ${isOpen ? 'rotate-90' : ''}`}
+					className={`mr-0.5 h-2.5 w-2.5 flex-shrink-0 transition-transform duration-100 text-void-fg-4 group-hover:text-void-fg-3 ${isOpen ? 'rotate-90' : ''}`}
 				/>
-				<span className="font-medium text-void-fg-4 group-hover:text-void-fg-3 text-xs">{title}</span>
+				<span className="font-medium text-void-fg-4 group-hover:text-void-fg-3 text-[10px]">{title}</span>
 			</div>
 			<div
-				className={`overflow-hidden transition-all duration-200 ease-in-out ${isOpen ? 'opacity-100' : 'max-h-0 opacity-0'} text-xs pl-4`}
+				className={`overflow-hidden transition-all duration-200 ease-in-out ${isOpen ? 'opacity-100' : 'max-h-0 opacity-0'} text-[10px] pl-3`}
 			>
-				<div className="overflow-x-auto text-void-fg-4 opacity-90 border-l-2 border-void-warning px-2 py-0.5">
+				<div className="overflow-x-auto text-void-fg-4 opacity-90 border-l-2 border-void-warning px-1.5 py-0.5">
 					{children}
 				</div>
 			</div>
@@ -1836,7 +2256,6 @@ const EditToolHeaderButtons = ({ applyBoxId, uri, codeStr, toolName, threadId }:
 		{/* <StatusIndicatorForApplyButton applyBoxId={applyBoxId} uri={uri} /> */}
 		{/* <JumpToFileButton uri={uri} /> */}
 		{streamState === 'idle-no-changes' && <CopyButton codeStr={codeStr} toolTipName='Copy' />}
-		<EditToolAcceptRejectButtonsHTML type={toolName} codeStr={codeStr} applyBoxId={applyBoxId} uri={uri} threadId={threadId} />
 	</div>
 }
 
@@ -1895,13 +2314,14 @@ const CommandTool = ({ toolMessage, type, threadId }: { threadId: string } & ({
 	const toolsService = accessor.get('IToolsService')
 	const isError = false
 	const title = getTitle(toolMessage)
-	const { desc1, desc1Info } = toolNameToDesc(toolMessage.name, toolMessage.params, accessor)
+	const { desc1, desc1Info } = toolNameToDesc(toolMessage.name, toolMessage.params, accessor, toolMessage.rawParams)
 	const statusIconMeta = getToolStatusIconMeta(toolMessage)
 	const streamState = useChatThreadsStreamState(threadId)
 
 	const divRef = useRef<HTMLDivElement | null>(null)
 
 	const isRejected = toolMessage.type === 'rejected'
+	const isRunning = toolMessage.type === 'running_now'
 	const { rawParams, params } = toolMessage
 	const componentParams: ToolHeaderParams = {
 		title,
@@ -1911,6 +2331,7 @@ const CommandTool = ({ toolMessage, type, threadId }: { threadId: string } & ({
 		isRejected,
 		icon: statusIconMeta?.icon,
 		iconTooltip: statusIconMeta?.tooltip,
+		isRunning,
 	}
 
 
@@ -1966,7 +2387,7 @@ const CommandTool = ({ toolMessage, type, threadId }: { threadId: string } & ({
 			componentParams.info = persistentTerminalNameOfId(toolMessage.params.persistentTerminalId)
 		}
 
-		componentParams.children = <ToolChildrenWrapper className='whitespace-pre text-nowrap overflow-auto text-sm'>
+		componentParams.children = <ToolChildrenWrapper className='whitespace-pre text-nowrap overflow-auto text-xs'>
 			<div className='!select-text cursor-auto'>
 				<BlockCode initValue={`${msg.trim()}`} language='shellscript' />
 			</div>
@@ -2003,7 +2424,9 @@ const MCPToolWrapper = ({ toolMessage }: WrapperProps<string>) => {
 
 	const isError = false
 	const isRejected = toolMessage.type === 'rejected'
+	const isRunning = toolMessage.type === 'running_now' || toolMessage.type === 'tool_request'
 	const { rawParams, params } = toolMessage
+
 	const componentParams: ToolHeaderParams = {
 		title,
 		desc1,
@@ -2011,44 +2434,67 @@ const MCPToolWrapper = ({ toolMessage }: WrapperProps<string>) => {
 		isRejected,
 		icon: statusIconMeta?.icon,
 		iconTooltip: statusIconMeta?.tooltip,
+		isRunning,
 	}
 
-	const paramsStr = JSON.stringify(params, null, 2)
-	componentParams.desc2 = <CopyButton codeStr={paramsStr} toolTipName={`Copy inputs: ${paramsStr}`} />
+	// Add copy button for params
+	if (params) {
+		try {
+			const paramsStr = JSON.stringify(params, null, 2)
+			componentParams.desc2 = <CopyButton codeStr={paramsStr} toolTipName={`Copy inputs: ${paramsStr}`} />
+		} catch (e) {
+			console.warn('Failed to stringify MCP tool params:', e)
+		}
+	}
 
 	componentParams.info = !toolMessage.mcpServerName ? 'MCP tool not found' : undefined
 
-	// Add copy inputs button in desc2
-
-
-	if (toolMessage.type === 'success' || toolMessage.type === 'tool_request') {
+	// Handle different tool states
+	if (toolMessage.type === 'success') {
 		const { result } = toolMessage
-		const resultStr = result ? mcpService.stringifyResult(result) : 'null'
-		componentParams.children = <ToolChildrenWrapper>
-			<SmallProseWrapper>
-				<ChatMarkdownRender
-					string={`\`\`\`json\n${resultStr}\n\`\`\``}
-					chatMessageLocation={undefined}
-					isApplyEnabled={false}
-					isLinkDetectionEnabled={true}
-				/>
-			</SmallProseWrapper>
-		</ToolChildrenWrapper>
+		try {
+			const resultStr = result ? mcpService.stringifyResult(result) : 'null'
+			componentParams.children = (
+				<ToolChildrenWrapper>
+					<SmallProseWrapper>
+						<ChatMarkdownRender
+							string={`\`\`\`json\n${resultStr}\n\`\`\``}
+							chatMessageLocation={undefined}
+							isApplyEnabled={false}
+							isLinkDetectionEnabled={true}
+						/>
+					</SmallProseWrapper>
+				</ToolChildrenWrapper>
+			)
+		} catch (e) {
+			console.error('Error rendering MCP tool result:', e)
+			componentParams.children = (
+				<ToolChildrenWrapper>
+					<CodeChildren>
+						{String(result)}
+					</CodeChildren>
+				</ToolChildrenWrapper>
+			)
+		}
 	}
 	else if (toolMessage.type === 'tool_error') {
 		const { result } = toolMessage
-		componentParams.bottomChildren = <BottomChildren title='Error'>
-			<CodeChildren>
-				{result}
-			</CodeChildren>
-		</BottomChildren>
+		componentParams.bottomChildren = (
+			<BottomChildren title='Error'>
+				<CodeChildren>
+					{result}
+				</CodeChildren>
+			</BottomChildren>
+		)
+	}
+	else if (toolMessage.type === 'tool_request') {
+		// Show pending state - no children needed, buttons will be shown separately
 	}
 	else if (toolMessage.type === 'running_now') {
-		// Show loading state - no additional children needed, icon already shows spinner
+		// Show loading state - icon already shows spinner
 	}
 
 	return <ToolHeaderWrapper {...componentParams} />
-
 }
 
 type ResultWrapper<T extends ToolName> = (props: WrapperProps<T>) => React.ReactNode
@@ -2061,7 +2507,7 @@ const builtinToolNameToComponent: { [T in BuiltinToolName]: { resultWrapper: Res
 
 			const title = getTitle(toolMessage)
 
-			const { desc1, desc1Info } = toolNameToDesc(toolMessage.name, toolMessage.params, accessor);
+			const { desc1, desc1Info } = toolNameToDesc(toolMessage.name, toolMessage.params, accessor, toolMessage.rawParams);
 			const statusIconMeta = getToolStatusIconMeta(toolMessage)
 
 			if (toolMessage.type === 'tool_request') return null // do not show past requests
@@ -2118,7 +2564,7 @@ const builtinToolNameToComponent: { [T in BuiltinToolName]: { resultWrapper: Res
 			const commandService = accessor.get('ICommandService')
 
 			const title = getTitle(toolMessage)
-			const { desc1, desc1Info } = toolNameToDesc(toolMessage.name, toolMessage.params, accessor)
+			const { desc1, desc1Info } = toolNameToDesc(toolMessage.name, toolMessage.params, accessor, toolMessage.rawParams)
 			const statusIconMeta = getToolStatusIconMeta(toolMessage)
 
 			if (toolMessage.type === 'tool_request') return null // do not show past requests
@@ -2176,7 +2622,7 @@ const builtinToolNameToComponent: { [T in BuiltinToolName]: { resultWrapper: Res
 			const commandService = accessor.get('ICommandService')
 			const explorerService = accessor.get('IExplorerService')
 			const title = getTitle(toolMessage)
-			const { desc1, desc1Info } = toolNameToDesc(toolMessage.name, toolMessage.params, accessor)
+			const { desc1, desc1Info } = toolNameToDesc(toolMessage.name, toolMessage.params, accessor, toolMessage.rawParams)
 			const statusIconMeta = getToolStatusIconMeta(toolMessage)
 
 			if (toolMessage.type === 'tool_request') return null // do not show past requests
@@ -2241,7 +2687,7 @@ const builtinToolNameToComponent: { [T in BuiltinToolName]: { resultWrapper: Res
 			const isError = false
 			const isRejected = toolMessage.type === 'rejected'
 			const title = getTitle(toolMessage)
-			const { desc1, desc1Info } = toolNameToDesc(toolMessage.name, toolMessage.params, accessor)
+			const { desc1, desc1Info } = toolNameToDesc(toolMessage.name, toolMessage.params, accessor, toolMessage.rawParams)
 			const statusIconMeta = getToolStatusIconMeta(toolMessage)
 
 			if (toolMessage.type === 'tool_request') return null // do not show past requests
@@ -2300,7 +2746,7 @@ const builtinToolNameToComponent: { [T in BuiltinToolName]: { resultWrapper: Res
 			const isError = false
 			const isRejected = toolMessage.type === 'rejected'
 			const title = getTitle(toolMessage)
-			const { desc1, desc1Info } = toolNameToDesc(toolMessage.name, toolMessage.params, accessor)
+			const { desc1, desc1Info } = toolNameToDesc(toolMessage.name, toolMessage.params, accessor, toolMessage.rawParams)
 			const statusIconMeta = getToolStatusIconMeta(toolMessage)
 
 			if (toolMessage.type === 'tool_request') return null // do not show past requests
@@ -2365,7 +2811,7 @@ const builtinToolNameToComponent: { [T in BuiltinToolName]: { resultWrapper: Res
 			const title = getTitle(toolMessage);
 			const isError = false
 			const isRejected = toolMessage.type === 'rejected'
-			const { desc1, desc1Info } = toolNameToDesc(toolMessage.name, toolMessage.params, accessor);
+			const { desc1, desc1Info } = toolNameToDesc(toolMessage.name, toolMessage.params, accessor, toolMessage.rawParams);
 			const statusIconMeta = getToolStatusIconMeta(toolMessage);
 
 			if (toolMessage.type === 'tool_request') return null // do not show past requests
@@ -2423,7 +2869,7 @@ const builtinToolNameToComponent: { [T in BuiltinToolName]: { resultWrapper: Res
 			const title = getTitle(toolMessage)
 
 			const { uri } = toolMessage.params ?? {}
-			const { desc1, desc1Info } = toolNameToDesc(toolMessage.name, toolMessage.params, accessor)
+			const { desc1, desc1Info } = toolNameToDesc(toolMessage.name, toolMessage.params, accessor, toolMessage.rawParams)
 			const statusIconMeta = getToolStatusIconMeta(toolMessage)
 
 			if (toolMessage.type === 'tool_request') return null // do not show past requests
@@ -2478,7 +2924,7 @@ const builtinToolNameToComponent: { [T in BuiltinToolName]: { resultWrapper: Res
 			const isError = false
 			const isRejected = toolMessage.type === 'rejected'
 			const title = getTitle(toolMessage)
-			const { desc1, desc1Info } = toolNameToDesc(toolMessage.name, toolMessage.params, accessor)
+			const { desc1, desc1Info } = toolNameToDesc(toolMessage.name, toolMessage.params, accessor, toolMessage.rawParams)
 			const statusIconMeta = getToolStatusIconMeta(toolMessage)
 
 
@@ -2529,7 +2975,7 @@ const builtinToolNameToComponent: { [T in BuiltinToolName]: { resultWrapper: Res
 			const isError = false
 			const isRejected = toolMessage.type === 'rejected'
 			const title = getTitle(toolMessage)
-			const { desc1, desc1Info } = toolNameToDesc(toolMessage.name, toolMessage.params, accessor)
+			const { desc1, desc1Info } = toolNameToDesc(toolMessage.name, toolMessage.params, accessor, toolMessage.rawParams)
 			const statusIconMeta = getToolStatusIconMeta(toolMessage)
 
 			const { rawParams, params } = toolMessage
@@ -2602,7 +3048,7 @@ const builtinToolNameToComponent: { [T in BuiltinToolName]: { resultWrapper: Res
 			const accessor = useAccessor()
 			const terminalToolsService = accessor.get('ITerminalToolService')
 
-			const { desc1, desc1Info } = toolNameToDesc(toolMessage.name, toolMessage.params, accessor)
+			const { desc1, desc1Info } = toolNameToDesc(toolMessage.name, toolMessage.params, accessor, toolMessage.rawParams)
 			const title = getTitle(toolMessage)
 			const statusIconMeta = getToolStatusIconMeta(toolMessage)
 
@@ -2651,7 +3097,7 @@ const builtinToolNameToComponent: { [T in BuiltinToolName]: { resultWrapper: Res
 			const commandService = accessor.get('ICommandService')
 			const terminalToolsService = accessor.get('ITerminalToolService')
 
-			const { desc1, desc1Info } = toolNameToDesc(toolMessage.name, toolMessage.params, accessor)
+			const { desc1, desc1Info } = toolNameToDesc(toolMessage.name, toolMessage.params, accessor, toolMessage.rawParams)
 			const title = getTitle(toolMessage)
 			const statusIconMeta = getToolStatusIconMeta(toolMessage)
 
@@ -2777,37 +3223,56 @@ const _ChatBubble = ({ threadId, chatMessage, currCheckpointIdx, isCommitted, me
 		/>
 	}
 	else if (role === 'tool') {
-
+		// Handle invalid params case first
 		if (chatMessage.type === 'invalid_params') {
-			return <div className={`${isCheckpointGhost ? 'opacity-50' : ''}`}>
+			return <div className={`my-0.25 ${isCheckpointGhost ? 'opacity-50' : ''}`}>
 				<InvalidTool toolName={chatMessage.name} message={chatMessage.content} mcpServerName={chatMessage.mcpServerName} />
 			</div>
 		}
 
+		// Determine which wrapper to use
 		const toolName = chatMessage.name
 		const isBuiltInTool = isABuiltinToolName(toolName)
-		const ToolResultWrapper = isBuiltInTool ? builtinToolNameToComponent[toolName]?.resultWrapper as ResultWrapper<ToolName>
-			: MCPToolWrapper as ResultWrapper<ToolName>
 
-		if (ToolResultWrapper)
-			return <>
-				<div className={`transition-opacity duration-300 ease-in-out ${isCheckpointGhost ? 'opacity-50' : 'opacity-100'}`}>
-					<ToolResultWrapper
-						toolMessage={chatMessage}
-						messageIdx={messageIdx}
-						threadId={threadId}
-					/>
+		// Get the appropriate wrapper component
+		let ToolResultWrapper: ResultWrapper<ToolName> | undefined
+		if (isBuiltInTool) {
+			const toolComponent = builtinToolNameToComponent[toolName]
+			ToolResultWrapper = toolComponent?.resultWrapper as ResultWrapper<ToolName> | undefined
+		} else {
+			ToolResultWrapper = MCPToolWrapper as ResultWrapper<ToolName>
+		}
+
+		// Render tool with error boundary
+		if (!ToolResultWrapper) {
+			console.warn(`No tool wrapper found for tool: ${toolName}`)
+			return null
+		}
+
+		return (
+			<>
+				<div className={`transition-opacity duration-300 ease-in-out my-0.25 ${isCheckpointGhost ? 'opacity-50' : 'opacity-100'}`}>
+					<ErrorBoundary>
+						<ToolResultWrapper
+							toolMessage={chatMessage}
+							messageIdx={messageIdx}
+							threadId={threadId}
+						/>
+					</ErrorBoundary>
 				</div>
-				{chatMessage.type === 'tool_request' ?
-					<div className={`${isCheckpointGhost ? 'opacity-50 pointer-events-none' : ''}`}>
-						<ToolRequestAcceptRejectButtons toolName={chatMessage.name} />
-					</div> : null}
+				{chatMessage.type === 'tool_request' && (
+					<div className={`my-0.25 ${isCheckpointGhost ? 'opacity-50 pointer-events-none' : ''}`}>
+						<ErrorBoundary>
+							<ToolRequestAcceptRejectButtons toolName={chatMessage.name} />
+						</ErrorBoundary>
+					</div>
+				)}
 			</>
-		return null
+		)
 	}
 
 	else if (role === 'interrupted_streaming_tool') {
-		return <div className={`${isCheckpointGhost ? 'opacity-50' : ''}`}>
+		return <div className={`my-0.25 ${isCheckpointGhost ? 'opacity-50' : ''}`}>
 			<CanceledTool toolName={chatMessage.name} mcpServerName={chatMessage.mcpServerName} />
 		</div>
 	}
@@ -2822,6 +3287,50 @@ const _ChatBubble = ({ threadId, chatMessage, currCheckpointIdx, isCommitted, me
 		/>
 	}
 
+}
+
+type ParallelToolGroupProps = {
+    messages: Array<{ message: ChatMessage, index: number }>,
+    previousMessages: ChatMessage[],
+    threadId: string,
+    currCheckpointIdx: number | undefined,
+    isRunning: IsRunningType,
+    scrollContainerRef: React.MutableRefObject<HTMLDivElement | null>,
+}
+
+const ParallelToolGroup = ({
+    messages,
+    previousMessages,
+    threadId,
+    currCheckpointIdx,
+    isRunning,
+    scrollContainerRef,
+}: ParallelToolGroupProps) => {
+    return (
+        <>
+            {messages.map(({ index }) => {
+                const previousMessage = index > 0 ? previousMessages[index - 1] : null
+                const previousRole = previousMessage?.role
+                const currentRole = previousMessages[index]?.role
+                const addGap = (previousRole === 'user' && currentRole === 'assistant') ||
+                               (previousRole === 'assistant' && currentRole === 'user')
+
+                return (
+                    <div key={`tool-${index}`} className={addGap ? 'mt-2' : 'mt-1'}>
+                        <ChatBubble
+                            currCheckpointIdx={currCheckpointIdx}
+                            chatMessage={previousMessages[index]}
+                            messageIdx={index}
+                            isCommitted={true}
+                            chatIsRunning={isRunning}
+                            threadId={threadId}
+                            _scrollToBottom={() => scrollToBottom(scrollContainerRef)}
+                        />
+                    </div>
+                )
+            })}
+        </>
+    )
 }
 
 const CommandBarInChat = () => {
@@ -3086,52 +3595,61 @@ const CommandBarInChat = () => {
 
 
 
-const EditToolSoFar = ({ toolCallSoFar, }: { toolCallSoFar: RawToolCallObj }) => {
-
+const EditToolSoFar = ({ toolCallSoFar }: { toolCallSoFar: RawToolCallObj }) => {
 	if (!isABuiltinToolName(toolCallSoFar.name)) return null
 
 	const accessor = useAccessor()
 
-	const uri = toolCallSoFar.rawParams.uri ? URI.file(toolCallSoFar.rawParams.uri) : undefined
+	// Safely parse URI
+	let uri: URI | undefined
+	try {
+		if (toolCallSoFar.rawParams.uri && typeof toolCallSoFar.rawParams.uri === 'string') {
+			uri = URI.file(toolCallSoFar.rawParams.uri)
+		}
+	} catch (e) {
+		console.warn('Failed to parse URI for EditToolSoFar:', e)
+	}
 
-	const title = titleOfBuiltinToolName[toolCallSoFar.name].proposed
+	const title = titleOfBuiltinToolName[toolCallSoFar.name]?.proposed || 'Editing file'
 
-	const uriDone = toolCallSoFar.doneParams.includes('uri')
-	const desc1 = uriDone ? getBasename(toolCallSoFar.rawParams['uri'] ?? 'unknown') : 'Generating...'
+	const uriDone = toolCallSoFar.doneParams?.includes('uri') ?? false
+	const uriStr = toolCallSoFar.rawParams['uri'] as string | undefined
+	const desc1 = uriDone && uriStr ? getBasename(uriStr) : 'Generating...'
 
-	const desc1OnClick = () => { uri && voidOpenFileFn(uri, accessor) }
+	const desc1OnClick = uri ? () => voidOpenFileFn(uri, accessor) : undefined
 
-	// Show loading spinner icon like other tools
-	const TOOL_STATUS_ICON_SIZE = 14
+	// Show loading spinner icon
+	const TOOL_STATUS_ICON_SIZE = 12
 	const icon = <CircleSpinner size={TOOL_STATUS_ICON_SIZE} className='text-void-fg-3 flex-shrink-0' />
 	const iconTooltip = 'Running...'
 
 	// Get the code being generated
-	const code = toolCallSoFar.rawParams.search_replace_blocks ?? toolCallSoFar.rawParams.new_content ?? ''
+	const code = (toolCallSoFar.rawParams.search_replace_blocks ?? toolCallSoFar.rawParams.new_content ?? '') as string
 
 	// Determine if we have any code to display
 	const hasCode = !!(code && code.length > 0)
 
-	// If URI has not been specified
-	return <ToolHeaderWrapper
-		title={title}
-		desc1={desc1}
-		desc1OnClick={desc1OnClick}
-		icon={icon}
-		iconTooltip={iconTooltip}
-		isOpen={hasCode} // Auto-expand if we have code to show
-	>
-		{hasCode ? (
-			<ToolChildrenWrapper className='bg-void-bg-3'>
-				<EditToolChildren
-					uri={uri}
-					code={code}
-					type={'rewrite'} // as it streams, show in rewrite format, don't make a diff editor
-				/>
-			</ToolChildrenWrapper>
-		) : null}
-	</ToolHeaderWrapper>
-
+	return (
+		<ToolHeaderWrapper
+			title={title}
+			desc1={desc1}
+			desc1OnClick={desc1OnClick}
+			icon={icon}
+			iconTooltip={iconTooltip}
+			isOpen={hasCode}
+			isRunning={true}
+		>
+			{hasCode && uri ? (
+				<ToolChildrenWrapper className='bg-void-bg-3'>
+					<EditToolChildren
+						uri={uri}
+						code={code}
+						type={'rewrite'} // as it streams, show in rewrite format, don't make a diff editor
+					/>
+				</ToolChildrenWrapper>
+			) : null}
+		</ToolHeaderWrapper>
+	)
 }
 
 
@@ -3180,7 +3698,42 @@ export const SidebarChat = () => {
 
 	const sidebarRef = useRef<HTMLDivElement>(null)
 	const scrollContainerRef = useRef<HTMLDivElement | null>(null)
-	const onSubmit = useCallback(async (_forceSubmit?: string) => {
+	// State for images
+	const [images, setImages] = useState<string[]>([])
+	// State for drag and drop visual feedback
+	const [isDragOver, setIsDragOver] = useState(false)
+
+	// Helper function to process image files (used for file input, paste, and drop)
+	const processImageFiles = useCallback((files: FileList | File[] | null | undefined) => {
+		if (!files || files.length === 0) return
+
+		const imagePromises: Promise<string>[] = []
+		for (let i = 0; i < files.length; i++) {
+			const file = files[i]
+			if (!file.type.startsWith('image/')) continue
+
+			const promise = new Promise<string>((resolve, reject) => {
+				const reader = new FileReader()
+				reader.onload = (event) => {
+					const dataUrl = event.target?.result as string
+					resolve(dataUrl)
+				}
+				reader.onerror = reject
+				reader.readAsDataURL(file)
+			})
+			imagePromises.push(promise)
+		}
+
+		if (imagePromises.length > 0) {
+			Promise.all(imagePromises).then((dataUrls) => {
+				setImages(prev => [...prev, ...dataUrls])
+			}).catch((error) => {
+				console.error('Error reading image files:', error)
+			})
+		}
+	}, [])
+
+	const onSubmit = useCallback(async (_forceSubmit?: string, _images?: string[]) => {
 
 		if (isDisabled && !_forceSubmit) return
 		if (isRunning) return
@@ -3189,9 +3742,10 @@ export const SidebarChat = () => {
 
 		// send message to LLM
 		const userMessage = _forceSubmit || textAreaRef.current?.value || ''
+		const imagesToSend = _images ?? images
 
 		try {
-			await chatThreadsService.addUserMessageAndStreamResponse({ userMessage, threadId })
+			await chatThreadsService.addUserMessageAndStreamResponse({ userMessage, _images: imagesToSend.length > 0 ? imagesToSend : undefined, threadId })
 			// Set waiting state to true after sending message
 			setWaitingForFirstAIMessage(true)
 		} catch (e) {
@@ -3199,10 +3753,11 @@ export const SidebarChat = () => {
 		}
 
 		setSelections([]) // clear staging
+		setImages([]) // clear images
 		textAreaFnsRef.current?.setValue('')
 		textAreaRef.current?.focus() // focus input after submit
 
-	}, [chatThreadsService, isDisabled, isRunning, textAreaRef, textAreaFnsRef, setSelections, settingsState])
+	}, [chatThreadsService, isDisabled, isRunning, textAreaRef, textAreaFnsRef, setSelections, settingsState, images])
 
 	const onAbort = async () => {
 		const threadId = currentThread.id
@@ -3243,40 +3798,133 @@ export const SidebarChat = () => {
 
 
 	const previousMessagesHTML = useMemo(() => {
-		// const lastMessageIdx = previousMessages.findLastIndex(v => v.role !== 'checkpoint')
-		// tool request shows up as Editing... if in progress
-		return previousMessages.map((message, i) => {
-			return <ChatBubble
-				key={i}
-				currCheckpointIdx={currCheckpointIdx}
-				chatMessage={message}
-				messageIdx={i}
-				isCommitted={true}
-				chatIsRunning={isRunning}
-				threadId={threadId}
-				_scrollToBottom={() => scrollToBottom(scrollContainerRef)}
-			/>
+		// Simplified parallel tool grouping logic
+		const PARALLEL_TOOLS = ['read_file', 'ls_dir', 'get_dir_tree', 'search_pathnames_only', 'search_for_files', 'search_in_file', 'read_lint_errors'] as const
+
+		const isParallelTool = (msg: ChatMessage): boolean => {
+			return msg.role === 'tool'
+				&& msg.type !== 'invalid_params'
+				&& isABuiltinToolName(msg.name)
+				&& PARALLEL_TOOLS.includes(msg.name as any)
+		}
+
+		const groupedMessages: Array<{ type: 'single', message: ChatMessage, index: number } | { type: 'parallel', messages: Array<{ message: ChatMessage, index: number }> }> = []
+		let currentParallelGroup: Array<{ message: ChatMessage, index: number }> = []
+
+		for (let i = 0; i < previousMessages.length; i++) {
+			const message = previousMessages[i]
+
+			if (isParallelTool(message)) {
+				currentParallelGroup.push({ message, index: i })
+
+				// Check if next message is also a parallel tool (within reasonable distance)
+				let foundNextParallelTool = false
+				for (let j = i + 1; j < Math.min(i + 4, previousMessages.length); j++) {
+					const nextMsg = previousMessages[j]
+					if (isParallelTool(nextMsg)) {
+						foundNextParallelTool = true
+						break
+					}
+					// Stop if we hit a user message or checkpoint
+					if (nextMsg.role === 'user' || nextMsg.role === 'checkpoint') {
+						break
+					}
+				}
+
+				// Close group if no more parallel tools found
+				if (!foundNextParallelTool) {
+					if (currentParallelGroup.length > 1) {
+						groupedMessages.push({ type: 'parallel', messages: [...currentParallelGroup] })
+					} else if (currentParallelGroup.length === 1) {
+						groupedMessages.push({ type: 'single', message: currentParallelGroup[0].message, index: currentParallelGroup[0].index })
+					}
+					currentParallelGroup = []
+				}
+			} else {
+				// Close any pending parallel group
+				if (currentParallelGroup.length > 1) {
+					groupedMessages.push({ type: 'parallel', messages: [...currentParallelGroup] })
+				} else if (currentParallelGroup.length === 1) {
+					groupedMessages.push({ type: 'single', message: currentParallelGroup[0].message, index: currentParallelGroup[0].index })
+				}
+				currentParallelGroup = []
+
+				// Add current message as single
+				groupedMessages.push({ type: 'single', message, index: i })
+			}
+		}
+
+		// Handle remaining items in currentParallelGroup
+		if (currentParallelGroup.length > 1) {
+			groupedMessages.push({ type: 'parallel', messages: [...currentParallelGroup] })
+		} else if (currentParallelGroup.length === 1) {
+			groupedMessages.push({ type: 'single', message: currentParallelGroup[0].message, index: currentParallelGroup[0].index })
+		}
+
+		// Render grouped messages
+		return groupedMessages.flatMap((group, groupIdx) => {
+			if (group.type === 'single') {
+				const i = group.index
+				const previousMessage = i > 0 ? previousMessages[i - 1] : null
+				const previousRole = previousMessage?.role
+				const currentRole = group.message.role
+
+				// Add extra spacing if switching between user and assistant messages
+				const shouldAddGap = (previousRole === 'user' && currentRole === 'assistant') ||
+									 (previousRole === 'assistant' && currentRole === 'user')
+
+				return (
+					<div key={`single-${i}`} className={shouldAddGap ? 'mt-2' : 'mt-1'}>
+						<ChatBubble
+							currCheckpointIdx={currCheckpointIdx}
+							chatMessage={group.message}
+							messageIdx={i}
+							isCommitted={true}
+							chatIsRunning={isRunning}
+							threadId={threadId}
+							_scrollToBottom={() => scrollToBottom(scrollContainerRef)}
+						/>
+					</div>
+				)
+			} else {
+				// Parallel group - render all tools immediately
+				return (
+					<ParallelToolGroup
+						key={`parallel-${groupIdx}-${group.messages[0]?.index ?? 'x'}`}
+						messages={group.messages}
+						previousMessages={previousMessages}
+						threadId={threadId}
+						currCheckpointIdx={currCheckpointIdx}
+						isRunning={isRunning}
+						scrollContainerRef={scrollContainerRef}
+					/>
+				)
+			}
 		})
 	}, [previousMessages, threadId, currCheckpointIdx, isRunning])
 
 	const streamingChatIdx = previousMessagesHTML.length
-	const currStreamingMessageHTML = reasoningSoFar || displayContentSoFar || isRunning ?
-		<ChatBubble
-			key={'curr-streaming-msg'}
-			currCheckpointIdx={currCheckpointIdx}
-			chatMessage={{
-				role: 'assistant',
-				displayContent: displayContentSoFar ?? '',
-				reasoning: reasoningSoFar ?? '',
-				anthropicReasoning: null,
-			}}
-			messageIdx={streamingChatIdx}
-			isCommitted={false}
-			chatIsRunning={isRunning}
+	const lastMessage = previousMessages[previousMessages.length - 1]
+	const shouldAddGapForStreaming = lastMessage?.role === 'user'
 
-			threadId={threadId}
-			_scrollToBottom={null}
-		/> : null
+	const currStreamingMessageHTML = reasoningSoFar || displayContentSoFar || isRunning ?
+		<div className={shouldAddGapForStreaming ? 'mt-2' : 'mt-1'}>
+			<ChatBubble
+				key={'curr-streaming-msg'}
+				currCheckpointIdx={currCheckpointIdx}
+				chatMessage={{
+					role: 'assistant',
+					displayContent: displayContentSoFar ?? '',
+					reasoning: reasoningSoFar ?? '',
+					anthropicReasoning: null,
+				}}
+				messageIdx={streamingChatIdx}
+				isCommitted={false}
+				chatIsRunning={isRunning}
+				threadId={threadId}
+				_scrollToBottom={null}
+			/>
+		</div> : null
 
 
 	// the tool currently being generated
@@ -3293,7 +3941,7 @@ export const SidebarChat = () => {
 		scrollContainerRef={scrollContainerRef}
 		className={`
 			flex flex-col
-			px-4 py-4 space-y-4
+			px-4 py-3
 			w-full h-full
 			overflow-x-hidden
 			overflow-y-auto
@@ -3340,6 +3988,97 @@ export const SidebarChat = () => {
 		}
 	}, [onSubmit, onAbort, isRunning])
 
+	// Handle image file selection
+	const handleImageSelect = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+		processImageFiles(e.target.files)
+		// Reset input
+		e.target.value = ''
+	}, [processImageFiles])
+
+	// Handle paste event for images
+	const handlePaste = useCallback((e: React.ClipboardEvent<HTMLTextAreaElement>) => {
+		const clipboardData = e.clipboardData
+		if (!clipboardData) return
+
+		// Check if clipboard contains files (images)
+		const files = clipboardData.files
+		if (files && files.length > 0) {
+			// Check if any files are images
+			const hasImages = Array.from(files).some(file => file.type.startsWith('image/'))
+			if (hasImages) {
+				e.preventDefault() // Prevent default paste behavior
+				processImageFiles(files)
+			}
+		}
+		// Allow normal text paste if no images
+	}, [processImageFiles])
+
+	// Unified drag and drop handlers for images (reusable across all elements)
+	// Check if the drag contains image files
+	const hasImageFiles = useCallback((e: React.DragEvent): boolean => {
+		if (!e.dataTransfer.types.includes('Files')) return false
+		const items = Array.from(e.dataTransfer.items)
+		return items.some(item => item.type.startsWith('image/'))
+	}, [])
+
+	// Create reusable drag handlers that can be attached to any element
+	const createDragHandlers = useCallback(() => {
+		const handleDragEnter = (e: React.DragEvent) => {
+			if (hasImageFiles(e)) {
+				e.preventDefault()
+				setIsDragOver(true)
+				e.dataTransfer.dropEffect = 'copy'
+			}
+		}
+
+		const handleDragOver = (e: React.DragEvent) => {
+			if (hasImageFiles(e)) {
+				e.preventDefault() // Must preventDefault on each element to allow drop
+				setIsDragOver(true)
+				e.dataTransfer.dropEffect = 'copy'
+			}
+		}
+
+		const handleDragLeave = (e: React.DragEvent) => {
+			// Check if we're actually leaving the drop zone (not just entering a child)
+			const relatedTarget = e.relatedTarget as Node | null
+			const currentTarget = e.currentTarget as Node | null
+
+			if (currentTarget && (!relatedTarget || !currentTarget.contains(relatedTarget))) {
+				setIsDragOver(false)
+			}
+		}
+
+		const handleDrop = (e: React.DragEvent) => {
+			e.preventDefault()
+			setIsDragOver(false)
+
+			const files = e.dataTransfer.files
+			if (files && files.length > 0) {
+				processImageFiles(files)
+			}
+		}
+
+		return { handleDragEnter, handleDragOver, handleDragLeave, handleDrop }
+	}, [hasImageFiles, processImageFiles])
+
+	// Get the handlers (created once and reused)
+	const dragHandlers = createDragHandlers()
+
+	// Remove image
+	const removeImage = useCallback((index: number) => {
+		setImages(prev => prev.filter((_, i) => i !== index))
+	}, [])
+
+	// File input ref for image button
+	const fileInputRef = useRef<HTMLInputElement | null>(null)
+
+	const handleImageButtonClick = useCallback(() => {
+		fileInputRef.current?.click()
+	}, [])
+
+	const chatAreaRef = useRef<HTMLDivElement | null>(null)
+
 	const inputChatArea = <VoidChatArea
 		featureName='Chat'
 		onSubmit={() => onSubmit()}
@@ -3351,18 +4090,78 @@ export const SidebarChat = () => {
 		selections={selections}
 		setSelections={setSelections}
 		onClickAnywhere={() => { textAreaRef.current?.focus() }}
+		divRef={chatAreaRef}
+		imageButton={
+			<>
+				<input
+					ref={fileInputRef}
+					type='file'
+					accept='image/*'
+					multiple
+					onChange={handleImageSelect}
+					className='hidden'
+				/>
+				<ButtonAddImage onClick={handleImageButtonClick} />
+			</>
+		}
+		onDragEnter={dragHandlers.handleDragEnter}
+		onDragOver={dragHandlers.handleDragOver}
+		onDragLeave={dragHandlers.handleDragLeave}
+		onDrop={dragHandlers.handleDrop}
+		isDragOver={isDragOver}
 	>
-		<VoidInputBox2
-			enableAtToMention
-			className={`min-h-[81px] px-0.5 py-0.5`}
-			placeholder={`@ to mention, ${keybindingString ? `${keybindingString} to add a selection. ` : ''}Enter instructions...`}
-			onChangeText={onChangeText}
-			onKeyDown={onKeyDown}
-			onFocus={() => { chatThreadsService.setCurrentlyFocusedMessageIdx(undefined) }}
-			ref={textAreaRef}
-			fnsRef={textAreaFnsRef}
-			multiline={true}
-		/>
+		<div
+			className='w-full min-h-[81px]'
+			onDragEnter={dragHandlers.handleDragEnter}
+			onDragOver={dragHandlers.handleDragOver}
+			onDragLeave={dragHandlers.handleDragLeave}
+			onDrop={dragHandlers.handleDrop}
+		>
+			<VoidInputBox2
+				enableAtToMention
+				className={`min-h-[81px] px-0.5 py-0.5`}
+				placeholder={`@ to mention, ${keybindingString ? `${keybindingString} to add a selection. ` : ''}Enter instructions...`}
+				onChangeText={onChangeText}
+				onKeyDown={onKeyDown}
+				onFocus={() => { chatThreadsService.setCurrentlyFocusedMessageIdx(undefined) }}
+				onPaste={handlePaste}
+				onDragEnter={dragHandlers.handleDragEnter}
+				onDragOver={dragHandlers.handleDragOver}
+				onDragLeave={dragHandlers.handleDragLeave}
+				onDrop={dragHandlers.handleDrop}
+				ref={textAreaRef}
+				fnsRef={textAreaFnsRef}
+				multiline={true}
+			/>
+
+			{/* Image preview */}
+			{images.length > 0 && (
+				<div
+					className='flex flex-wrap gap-1.5 mt-1'
+					onDragEnter={dragHandlers.handleDragEnter}
+					onDragOver={dragHandlers.handleDragOver}
+					onDragLeave={dragHandlers.handleDragLeave}
+					onDrop={dragHandlers.handleDrop}
+				>
+					{images.map((imageUrl, index) => (
+						<div key={index} className='relative'>
+							<img
+								src={imageUrl}
+								alt={`Upload ${index + 1}`}
+								className='w-12 h-12 object-cover rounded border border-void-border-3 shadow-sm'
+							/>
+							<button
+								type='button'
+								onClick={() => removeImage(index)}
+								className='absolute -top-1 -right-1 bg-void-bg-3 rounded-full p-0.5 hover:brightness-125 cursor-pointer shadow-sm'
+							>
+								<IconX size={12} className='stroke-[2]' />
+							</button>
+						</div>
+					))}
+				</div>
+			)}
+		</div>
 
 	</VoidChatArea>
 

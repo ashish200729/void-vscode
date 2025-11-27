@@ -32,6 +32,7 @@ type SimpleLLMMessage = {
 } | {
 	role: 'user';
 	content: string;
+	images?: string[]; // Array of image URLs (data URIs or URLs)
 } | {
 	role: 'assistant';
 	content: string;
@@ -42,6 +43,36 @@ type SimpleLLMMessage = {
 
 const CHARS_PER_TOKEN = 4 // assume abysmal chars per token
 const TRIM_TO_LEN = 120
+
+// Supported image MIME types for Anthropic API
+type AnthropicImageMimeType = 'image/png' | 'image/jpeg' | 'image/gif' | 'image/webp'
+
+// Helper functions to parse data URIs and extract base64 data
+const parseDataURI = (dataUri: string): { mimeType: AnthropicImageMimeType; data: string } | null => {
+	// Format: data:image/jpeg;base64,/9j/4AAQSkZJRg...
+	const match = dataUri.match(/^data:([^;]+);base64,(.+)$/)
+	if (!match) {
+		// If it's not a data URI, treat it as a regular URL
+		return null
+	}
+
+	// Map MIME type to Anthropic-supported types
+	const rawMimeType = match[1].toLowerCase()
+	let mimeType: AnthropicImageMimeType = 'image/jpeg' // default
+
+	// Map common MIME types to Anthropic-supported types
+	if (rawMimeType === 'image/png') mimeType = 'image/png'
+	else if (rawMimeType === 'image/jpeg' || rawMimeType === 'image/jpg') mimeType = 'image/jpeg'
+	else if (rawMimeType === 'image/gif') mimeType = 'image/gif'
+	else if (rawMimeType === 'image/webp') mimeType = 'image/webp'
+	// If unsupported, default to jpeg (will be converted if needed)
+
+	return {
+		mimeType,
+		data: match[2]
+	}
+}
+
 
 
 
@@ -76,30 +107,88 @@ const prepareMessages_openai_tools = (messages: SimpleLLMMessage[]): AnthropicOr
 	for (let i = 0; i < messages.length; i += 1) {
 		const currMsg = messages[i]
 
-		if (currMsg.role !== 'tool') {
-			newMessages.push(currMsg)
+		if (currMsg.role === 'user') {
+			// If user message has images, format as array with text and image_url
+			if (currMsg.images && currMsg.images.length > 0) {
+				const content: Array<{ type: 'text'; text: string } | { type: 'image_url'; image_url: { url: string } }> = [];
+
+				// Add text content - always add text entry when images are present (even if empty)
+				// This ensures OpenAI receives a valid content array format
+				const textContent = currMsg.content || '';
+				content.push({ type: 'text', text: textContent });
+
+				// Add all images
+				for (const imageUrl of currMsg.images) {
+					content.push({ type: 'image_url', image_url: { url: imageUrl } });
+				}
+
+				newMessages.push({
+					role: 'user',
+					content: content,
+				});
+			} else {
+				// No images, use string content format
+				newMessages.push(currMsg as OpenAILLMChatMessage);
+			}
 			continue
 		}
 
-		// edit previous assistant message to have called the tool
-		const prevMsg = 0 <= i - 1 && i - 1 <= newMessages.length ? newMessages[i - 1] : undefined
-		if (prevMsg?.role === 'assistant') {
-			prevMsg.tool_calls = [{
-				type: 'function',
-				id: currMsg.id,
-				function: {
-					name: currMsg.name,
-					arguments: JSON.stringify(currMsg.rawParams)
-				}
-			}]
+		if (currMsg.role !== 'tool') {
+			newMessages.push(currMsg as OpenAILLMChatMessage)
+			continue
 		}
 
-		// add the tool
-		newMessages.push({
-			role: 'tool',
-			tool_call_id: currMsg.id,
-			content: currMsg.content,
-		})
+		// 🚀 FIX: Collect ALL consecutive tool messages FIRST, then add all tool_calls to assistant, then all tool responses
+		// This ensures proper ordering and consistency across all providers
+
+		// Collect all consecutive tool messages (with proper type narrowing)
+		type ToolMessage = Extract<SimpleLLMMessage, { role: 'tool' }>
+		const toolMessages: ToolMessage[] = [];
+		let j = i;
+		while (j < messages.length && messages[j].role === 'tool') {
+			const toolMsg = messages[j];
+			if (toolMsg.role === 'tool') { // Type guard
+				if (toolMsg.id !== 'dummy') {
+					toolMessages.push(toolMsg);
+				}
+			}
+			j++;
+		}
+
+		// Get the last added message (which should be the assistant message)
+		const prevMsg = newMessages.length > 0 ? newMessages[newMessages.length - 1] : undefined
+
+		// Add ALL tool_calls to the assistant message
+		if (prevMsg?.role === 'assistant') {
+			// Initialize tool_calls array if not present
+			if (!prevMsg.tool_calls) {
+				prevMsg.tool_calls = [];
+			}
+			// Add all tool_calls
+			for (const toolMsg of toolMessages) {
+				prevMsg.tool_calls.push({
+					type: 'function',
+					id: toolMsg.id,
+					function: {
+						name: toolMsg.name,
+						arguments: JSON.stringify(toolMsg.rawParams)
+					}
+				});
+			}
+		}
+
+		// Add all tool response messages
+		for (const toolMsg of toolMessages) {
+			newMessages.push({
+				role: 'tool',
+				tool_call_id: toolMsg.id,
+				content: toolMsg.content,
+			})
+		}
+
+		// Skip ahead past the tools we just processed
+		i = j - 1; // -1 because the loop will increment i
+		continue
 	}
 	return newMessages
 
@@ -139,7 +228,7 @@ user: ...content, result(id, content)
 type AnthropicOrOpenAILLMMessage = AnthropicLLMChatMessage | OpenAILLMChatMessage
 
 const prepareMessages_anthropic_tools = (messages: SimpleLLMMessage[], supportsAnthropicReasoning: boolean): AnthropicOrOpenAILLMMessage[] => {
-	const newMessages: (AnthropicLLMChatMessage | (SimpleLLMMessage & { role: 'tool' }))[] = messages;
+	const newMessages: AnthropicLLMChatMessage[] = [];
 
 	for (let i = 0; i < messages.length; i += 1) {
 		const currMsg = messages[i]
@@ -148,51 +237,125 @@ const prepareMessages_anthropic_tools = (messages: SimpleLLMMessage[], supportsA
 		if (currMsg.role === 'assistant') {
 			if (currMsg.anthropicReasoning && supportsAnthropicReasoning) {
 				const content = currMsg.content
-				newMessages[i] = {
+				newMessages.push({
 					role: 'assistant',
 					content: content ? [...currMsg.anthropicReasoning, { type: 'text' as const, text: content }] : currMsg.anthropicReasoning
-				}
+				})
 			}
 			else {
-				newMessages[i] = {
+				newMessages.push({
 					role: 'assistant',
 					content: currMsg.content,
 					// strip away anthropicReasoning
-				}
+				})
 			}
 			continue
 		}
 
 		if (currMsg.role === 'user') {
-			newMessages[i] = {
-				role: 'user',
-				content: currMsg.content,
+			// If user message has images, format as array with text and image
+			if (currMsg.images && currMsg.images.length > 0) {
+				const content: Array<{ type: 'text'; text: string } | { type: 'image'; source: { type: 'base64'; media_type: AnthropicImageMimeType; data: string } }> = [];
+
+				// Add text content if it exists
+				if (currMsg.content) {
+					content.push({ type: 'text', text: currMsg.content });
+				}
+
+				// Add all images in Anthropic format: { type: 'image', source: { type: 'base64', media_type: string, data: string } }
+				for (const imageUrl of currMsg.images) {
+					const parsed = parseDataURI(imageUrl)
+					if (parsed) {
+						content.push({
+							type: 'image',
+							source: {
+								type: 'base64',
+								media_type: parsed.mimeType,
+								data: parsed.data
+							}
+						});
+					} else {
+						// If it's a URL, convert to base64 if possible, or skip
+						// For now, we'll skip URLs that aren't data URIs for Anthropic
+						console.warn('Anthropic API requires base64-encoded images. URL images are not supported.')
+					}
+				}
+
+				newMessages.push({
+					role: 'user',
+					content: content,
+				});
+			} else {
+				// No images, use string or array format
+				newMessages.push({
+					role: 'user',
+					content: currMsg.content,
+				})
 			}
 			continue
 		}
 
 		if (currMsg.role === 'tool') {
-			// add anthropic tools
-			const prevMsg = 0 <= i - 1 && i - 1 <= newMessages.length ? newMessages[i - 1] : undefined
+			// 🚀 FIX: Collect ALL consecutive tool messages FIRST, then add all tool_use blocks to assistant, then all tool_results to user
+			// This ensures every tool_result has a corresponding tool_use in the previous assistant message
 
-			// make it so the assistant called the tool
+			// Collect all consecutive tool messages (with proper type narrowing)
+			type ToolMessage = Extract<SimpleLLMMessage, { role: 'tool' }>
+			const toolMessages: ToolMessage[] = [];
+			let j = i;
+			while (j < messages.length && messages[j].role === 'tool') {
+				const toolMsg = messages[j];
+				if (toolMsg.role === 'tool') { // Type guard
+					if (toolMsg.id !== 'dummy') {
+						toolMessages.push(toolMsg);
+					}
+				}
+				j++;
+			}
+
+			// Get the last added message (which should be the assistant message)
+			const prevMsg = newMessages.length > 0 ? newMessages[newMessages.length - 1] : undefined
+
+			// Add ALL tool_use blocks to the assistant message
 			if (prevMsg?.role === 'assistant') {
 				if (typeof prevMsg.content === 'string') prevMsg.content = [{ type: 'text', text: prevMsg.content }]
-				prevMsg.content.push({ type: 'tool_use', id: currMsg.id, name: currMsg.name, input: currMsg.rawParams })
+
+				// Add all tool_use blocks
+				for (const toolMsg of toolMessages) {
+					prevMsg.content.push({
+						type: 'tool_use',
+						id: toolMsg.id,
+						name: toolMsg.name,
+						input: toolMsg.rawParams
+					})
+				}
 			}
 
-			// turn each tool into a user message with tool results at the end
-			newMessages[i] = {
-				role: 'user',
-				content: [{ type: 'tool_result', tool_use_id: currMsg.id, content: currMsg.content }]
+			// Collect all tool results corresponding to the tool_use blocks we just added
+			const toolResults: Array<{ type: 'tool_result'; tool_use_id: string; content: string }> = [];
+			for (const toolMsg of toolMessages) {
+				toolResults.push({
+					type: 'tool_result',
+					tool_use_id: toolMsg.id,
+					content: toolMsg.content
+				});
 			}
+
+			// Add ONE user message with all tool results
+			newMessages.push({
+				role: 'user',
+				content: toolResults
+			});
+
+			// Skip ahead past the tools we just processed
+			i = j - 1; // -1 because the loop will increment i
 			continue
 		}
 
 	}
 
-	// we just removed the tools
-	return newMessages as AnthropicLLMChatMessage[]
+	// All tool messages have been converted to user messages
+	return newMessages
 }
 
 
@@ -202,14 +365,27 @@ const prepareMessages_XML_tools = (messages: SimpleLLMMessage[], supportsAnthrop
 	for (let i = 0; i < messages.length; i += 1) {
 
 		const c = messages[i]
-		const next = 0 <= i + 1 && i + 1 <= messages.length - 1 ? messages[i + 1] : null
 
 		if (c.role === 'assistant') {
-			// if called a tool (message after it), re-add its XML to the message
-			// alternatively, could just hold onto the original output, but this way requires less piping raw strings everywhere
+			// if called tool(s) (message(s) after it), re-add their XML to the message
+			// Support multiple consecutive tool calls (parallel execution)
 			let content: AnthropicOrOpenAILLMMessage['content'] = c.content
-			if (next?.role === 'tool') {
-				content = `${content}\n\n${reParsedToolXMLString(next.name, next.rawParams)}`
+
+			// Collect all consecutive tool calls after this assistant message
+			const toolXMLs: string[] = [];
+			let j = i + 1;
+			while (j < messages.length && messages[j].role === 'tool') {
+				const toolMsg = messages[j];
+				if (toolMsg.role === 'tool') { // Type guard
+					if (toolMsg.id !== 'dummy') {
+						toolXMLs.push(reParsedToolXMLString(toolMsg.name, toolMsg.rawParams));
+					}
+				}
+				j++;
+			}
+
+			if (toolXMLs.length > 0) {
+				content = `${content}\n\n${toolXMLs.join('\n')}`;
 			}
 
 			// anthropic reasoning
@@ -223,16 +399,85 @@ const prepareMessages_XML_tools = (messages: SimpleLLMMessage[], supportsAnthrop
 		}
 		// add user or tool to the previous user message
 		else if (c.role === 'user' || c.role === 'tool') {
+			if (c.role === 'tool' && c.id === 'dummy') {
+				continue
+			}
 			if (c.role === 'tool')
 				c.content = `<${c.name}_result>\n${c.content}\n</${c.name}_result>`
 
-			if (llmChatMessages.length === 0 || llmChatMessages[llmChatMessages.length - 1].role !== 'user')
-				llmChatMessages.push({
+			// Handle user messages with images - XML format doesn't support native images, so we'll encode them
+			// For providers using XML format, images might not be supported, but we'll format them appropriately
+			if (c.role === 'user' && c.images && c.images.length > 0) {
+				// For XML format, we can't easily embed images in the message structure
+				// This would require provider-specific handling
+				// For now, we'll create an array content format similar to Anthropic if possible
+				const content: Array<{ type: 'text'; text: string } | { type: 'tool_result'; tool_use_id: string; content: string } | { type: 'image'; source: { type: 'base64'; media_type: AnthropicImageMimeType; data: string } }> = [];
+
+				if (c.content) {
+					content.push({ type: 'text', text: c.content });
+				}
+
+				// Add images in Anthropic-compatible format (works for providers that support arrays)
+				for (const imageUrl of c.images) {
+					const parsed = parseDataURI(imageUrl)
+					if (parsed) {
+						content.push({
+							type: 'image',
+							source: {
+								type: 'base64',
+								media_type: parsed.mimeType,
+								data: parsed.data
+							}
+						});
+					}
+				}
+
+				const userMessageWithImages: AnthropicLLMChatMessage = {
 					role: 'user',
-					content: c.content
-				})
-			else
-				llmChatMessages[llmChatMessages.length - 1].content += '\n\n' + c.content
+					content: content as Extract<AnthropicLLMChatMessage, { role: 'user' }>['content']
+				}
+
+				if (llmChatMessages.length === 0 || llmChatMessages[llmChatMessages.length - 1].role !== 'user') {
+					llmChatMessages.push(userMessageWithImages)
+				} else {
+					// If previous message is user with array content, merge
+					const prevMsg = llmChatMessages[llmChatMessages.length - 1]
+					if (prevMsg.role === 'user') {
+						// Only merge if both are user messages
+						// Convert to proper user content type
+						if (Array.isArray(prevMsg.content)) {
+							// Check if it's already user content (not assistant content)
+							const isUserContent = prevMsg.content.every(c =>
+								c.type === 'text' ||
+								c.type === 'tool_result' ||
+								c.type === 'image'
+							)
+							if (isUserContent) {
+								// Merge arrays - both are user content
+								const userContent = prevMsg.content as Extract<AnthropicLLMChatMessage, { role: 'user' }>['content']
+								prevMsg.content = [...userContent, ...content] as Extract<AnthropicLLMChatMessage, { role: 'user' }>['content']
+							} else {
+								// Previous content is assistant content, don't merge
+								llmChatMessages.push(userMessageWithImages)
+							}
+						} else if (typeof prevMsg.content === 'string') {
+							// Convert string to array and merge
+							prevMsg.content = [{ type: 'text', text: prevMsg.content }, ...content] as Extract<AnthropicLLMChatMessage, { role: 'user' }>['content']
+						}
+					} else {
+						llmChatMessages.push(userMessageWithImages)
+					}
+				}
+			} else {
+				// No images, use string format
+				if (llmChatMessages.length === 0 || llmChatMessages[llmChatMessages.length - 1].role !== 'user')
+					llmChatMessages.push({
+						role: 'user',
+						content: c.content
+					})
+				else
+					llmChatMessages[llmChatMessages.length - 1].content += '\n\n' + c.content
+			}
 		}
 	}
 	return llmChatMessages
@@ -425,11 +670,31 @@ const prepareOpenAIOrAnthropicMessages = ({
 			}
 			if (nextMsg?.role === 'tool') continue
 
+			// Check if message has images - if so, don't require text
+			// Support both Anthropic format ('image') and OpenAI format ('image_url')
+			const hasImages = currMsg.content.some(c => c.type === 'image' || c.type === 'image_url')
+
 			// replace any empty text entries with empty msg, and make sure there's at least 1 entry
+			// For messages with images, allow empty text strings (OpenAI supports this)
 			for (const c of currMsg.content) {
-				if (c.type === 'text') c.text = c.text || EMPTY_MESSAGE
+				if (c.type === 'text') {
+					// If message has images, keep empty strings as-is (OpenAI allows empty text with images)
+					// Otherwise, replace empty strings with EMPTY_MESSAGE
+					if (!hasImages) {
+						c.text = c.text || EMPTY_MESSAGE
+					}
+				}
 			}
-			if (currMsg.content.length === 0) currMsg.content = [{ type: 'text', text: EMPTY_MESSAGE }]
+			// If no content and no images, add empty message
+			if (currMsg.content.length === 0 && !hasImages) {
+				currMsg.content = [{ type: 'text', text: EMPTY_MESSAGE }]
+			}
+			// If has images but no text, add empty text entry (required by some providers)
+			// Note: OpenAI allows image-only messages, but some providers may require at least empty text
+			// However, prepareMessages_openai_tools already adds text when images are present, so this is mainly for other formats
+			if (hasImages && !currMsg.content.some(c => c.type === 'text')) {
+				currMsg.content.unshift({ type: 'text', text: '' })
+			}
 		}
 	}
 
@@ -478,6 +743,17 @@ const prepareGeminiMessages = (messages: AnthropicLLMChatMessage[]) => {
 						if (!latestToolName) return null
 						return { functionResponse: { id: c.tool_use_id, name: latestToolName, response: { output: c.content } } }
 					}
+					else if (c.type === 'image') {
+						// Convert Anthropic image format to Gemini inlineData format
+						// Anthropic: { type: 'image', source: { type: 'base64', media_type: string, data: string } }
+						// Gemini: { inlineData: { mimeType: string, data: string } }
+						return {
+							inlineData: {
+								mimeType: c.source.media_type,
+								data: c.source.data
+							}
+						}
+					}
 					else return null
 				}).filter(m => !!m)
 				return { role: 'user', parts, }
@@ -503,7 +779,17 @@ const prepareMessages = (params: {
 	providerName: ProviderName
 }): { messages: LLMChatMessage[], separateSystemMessage: string | undefined } => {
 
-	const specialFormat = params.specialToolFormat // this is just for ts stupidness
+	let specialFormat = params.specialToolFormat // this is just for ts stupidness
+
+	// For OpenAI-compatible providers, default to 'openai-style' when specialToolFormat is undefined
+	// This ensures images and other features work correctly with OpenAI-compatible APIs
+	const openAICompatibleProviders: ProviderName[] = [
+		'openAI', 'openRouter', 'openAICompatible', 'deepseek', 'groq', 'xAI', 'mistral',
+		'ollama', 'vLLM', 'lmStudio', 'liteLLM'
+	]
+	if (!specialFormat && openAICompatibleProviders.includes(params.providerName)) {
+		specialFormat = 'openai-style'
+	}
 
 	// if need to convert to gemini style of messaes, do that (treat as anthropic style, then convert to gemini style)
 	if (params.providerName === 'gemini' || specialFormat === 'gemini-style') {
@@ -594,6 +880,13 @@ class ConvertToLLMMessageService extends Disposable implements IConvertToLLMMess
 
 		const persistentTerminalIDs = this.terminalToolService.listPersistentTerminalIds()
 		const systemMessage = chat_systemMessage({ workspaceFolders, openedURIs, directoryStr, activeURI, persistentTerminalIDs, chatMode, mcpTools, includeXMLToolDefinitions })
+
+		// Debug logging (can be disabled in production)
+		// console.log('=== SYSTEM MESSAGE (first 3000 chars) ===\n', systemMessage.substring(0, 3000))
+		// console.log('=== SYSTEM MESSAGE (last 1000 chars) ===\n', systemMessage.substring(systemMessage.length - 1000))
+		// console.log('=== includeXMLToolDefinitions ===', includeXMLToolDefinitions)
+		// console.log('=== chatMode ===', chatMode)
+
 		return systemMessage
 	}
 
@@ -628,6 +921,7 @@ class ConvertToLLMMessageService extends Disposable implements IConvertToLLMMess
 				simpleLLMMessages.push({
 					role: m.role,
 					content: m.content,
+					images: m.images,
 				})
 			}
 		}
