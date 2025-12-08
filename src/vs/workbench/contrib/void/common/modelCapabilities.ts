@@ -534,13 +534,7 @@ const anthropicModelOptions = {
 		supportsFIM: false,
 		specialToolFormat: 'anthropic-style',
 		supportsSystemMessage: 'separated',
-		reasoningCapabilities: {
-			supportsReasoning: true,
-			canTurnOffReasoning: true,
-			canIOReasoning: true,
-			reasoningReservedOutputTokenSpace: 8192, // can bump it to 128_000 with beta mode output-128k-2025-02-19
-			reasoningSlider: { type: 'budget_slider', min: 1024, max: 8192, default: 1024 }, // they recommend batching if max > 32_000. we cap at 8192 because above is typically not necessary (often even buggy)
-		},
+		reasoningCapabilities: false,
 
 	},
 	'claude-3-5-sonnet-20241022': {
@@ -1599,20 +1593,17 @@ export type SendableReasoningInfo = {
 
 
 export const getIsReasoningEnabledState = (
-	featureName: FeatureName,
+	_featureName: FeatureName,
 	providerName: ProviderName,
 	modelName: string,
-	modelSelectionOptions: ModelSelectionOptions | undefined,
+	_modelSelectionOptions: ModelSelectionOptions | undefined,
 	overridesOfModel: OverridesOfModel | undefined,
 ) => {
-	const { supportsReasoning, canTurnOffReasoning } = getModelCapabilities(providerName, modelName, overridesOfModel).reasoningCapabilities || {}
+	const { supportsReasoning } = getModelCapabilities(providerName, modelName, overridesOfModel).reasoningCapabilities || {}
 	if (!supportsReasoning) return false
 
-	// default to enabled if can't turn off, or if the featureName is Chat.
-	const defaultEnabledVal = featureName === 'Chat' || !canTurnOffReasoning
-
-	const isReasoningEnabled = modelSelectionOptions?.reasoningEnabled ?? defaultEnabledVal
-	return isReasoningEnabled
+	// Force reasoning on when supported; ignore user overrides.
+	return true
 }
 
 
@@ -1626,27 +1617,26 @@ export const getReservedOutputTokenSpace = (providerName: ProviderName, modelNam
 
 // used to force reasoning state (complex) into something simple we can just read from when sending a message
 export const getSendableReasoningInfo = (
-	featureName: FeatureName,
+	_featureName: FeatureName,
 	providerName: ProviderName,
 	modelName: string,
-	modelSelectionOptions: ModelSelectionOptions | undefined,
+	_modelSelectionOptions: ModelSelectionOptions | undefined,
 	overridesOfModel: OverridesOfModel | undefined,
 ): SendableReasoningInfo => {
 
-	const { reasoningSlider: reasoningBudgetSlider } = getModelCapabilities(providerName, modelName, overridesOfModel).reasoningCapabilities || {}
-	const isReasoningEnabled = getIsReasoningEnabledState(featureName, providerName, modelName, modelSelectionOptions, overridesOfModel)
-	if (!isReasoningEnabled) return null
+	const { reasoningSlider: reasoningBudgetSlider, supportsReasoning } = getModelCapabilities(providerName, modelName, overridesOfModel).reasoningCapabilities || {}
+	if (!supportsReasoning) return null
+
+	const isReasoningEnabled = true
 
 	// check for reasoning budget
-	const reasoningBudget = reasoningBudgetSlider?.type === 'budget_slider' ? modelSelectionOptions?.reasoningBudget ?? reasoningBudgetSlider?.default : undefined
-	if (reasoningBudget) {
-		return { type: 'budget_slider_value', isReasoningEnabled: isReasoningEnabled, reasoningBudget: reasoningBudget }
+	if (reasoningBudgetSlider?.type === 'budget_slider') {
+		return { type: 'budget_slider_value', isReasoningEnabled, reasoningBudget: reasoningBudgetSlider.default }
 	}
 
 	// check for reasoning effort
-	const reasoningEffort = reasoningBudgetSlider?.type === 'effort_slider' ? modelSelectionOptions?.reasoningEffort ?? reasoningBudgetSlider?.default : undefined
-	if (reasoningEffort) {
-		return { type: 'effort_slider_value', isReasoningEnabled: isReasoningEnabled, reasoningEffort: reasoningEffort }
+	if (reasoningBudgetSlider?.type === 'effort_slider') {
+		return { type: 'effort_slider_value', isReasoningEnabled, reasoningEffort: reasoningBudgetSlider.default }
 	}
 
 	return null

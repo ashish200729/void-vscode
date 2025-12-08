@@ -756,10 +756,7 @@ export const VoidInputBox2 = forwardRef<HTMLTextAreaElement, InputBox2Props>(fun
 			onFocus={onFocus}
 			onBlur={onBlur}
 			onPaste={onPaste}
-			onDragEnter={onDragEnter}
-			onDragOver={onDragOver}
 			onDragLeave={onDragLeave}
-			onDrop={onDrop}
 
 			disabled={!isEnabled}
 
@@ -815,12 +812,14 @@ export const VoidInputBox2 = forwardRef<HTMLTextAreaElement, InputBox2Props>(fun
 			onDragEnter={useCallback((e: React.DragEvent<HTMLTextAreaElement>) => {
 				e.preventDefault();
 				e.stopPropagation();
-			}, [])}
+				onDragEnter?.(e);
+			}, [onDragEnter])}
 
 			onDragOver={useCallback((e: React.DragEvent<HTMLTextAreaElement>) => {
 				e.preventDefault();
 				e.stopPropagation();
-			}, [])}
+				onDragOver?.(e);
+			}, [onDragOver])}
 
 			onDrop={useCallback((e: React.DragEvent<HTMLTextAreaElement>) => {
 				e.preventDefault();
@@ -883,7 +882,9 @@ export const VoidInputBox2 = forwardRef<HTMLTextAreaElement, InputBox2Props>(fun
 						console.error('Failed to process dropped item:', error);
 					}
 				}
-			}, [chatThreadService, languageService])}
+
+				onDrop?.(e);
+			}, [chatThreadService, languageService, onDrop])}
 
 			rows={1}
 			placeholder={placeholder}
@@ -1351,6 +1352,7 @@ export const VoidCustomDropdownBox = <T extends NonNullable<any>>({
 	matchInputWidth = false,
 	gapPx = 0,
 	offsetPx = -6,
+	renderOption,
 }: {
 	options: T[];
 	selectedOption: T | undefined;
@@ -1364,6 +1366,7 @@ export const VoidCustomDropdownBox = <T extends NonNullable<any>>({
 	matchInputWidth?: boolean;
 	gapPx?: number;
 	offsetPx?: number;
+	renderOption?: (option: T, isSelected: boolean) => React.ReactNode;
 }) => {
 	const [isOpen, setIsOpen] = useState(false);
 	const [hoveredOption, setHoveredOption] = useState<T | null>(null);
@@ -1569,14 +1572,18 @@ export const VoidCustomDropdownBox = <T extends NonNullable<any>>({
 						onMouseEnter={() => setHoveredOption(option)}
 						onMouseLeave={() => setHoveredOption(null)}
 					>
-						{/* Option Text - Only show name */}
-						<span
-							className={`truncate ${
-							thisOptionIsSelected ? "text-white" : "text-void-fg-2"
-							}`}
-						>
-							{optionName}
-						</span>
+						{/* Custom option rendering or default */}
+						{renderOption ? (
+							renderOption(option, thisOptionIsSelected)
+						) : (
+							<span
+								className={`truncate ${
+								thisOptionIsSelected ? "text-white" : "text-void-fg-2"
+								}`}
+							>
+								{optionName}
+							</span>
+						)}
 					</div>
 					);
 				})}

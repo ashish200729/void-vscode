@@ -13,7 +13,7 @@ import { ChatMarkdownRender, ChatMessageLocation, getApplyBoxId } from '../markd
 import { URI } from '../../../../../../../base/common/uri.js';
 import { IDisposable } from '../../../../../../../base/common/lifecycle.js';
 import { ErrorDisplay } from './ErrorDisplay.js';
-import { BlockCode, TextAreaFns, VoidCustomDropdownBox, VoidInputBox2, VoidSlider, VoidSwitch, VoidDiffEditor } from '../util/inputs.js';
+import { BlockCode, TextAreaFns, VoidCustomDropdownBox, VoidInputBox2, VoidDiffEditor } from '../util/inputs.js';
 import { ModelDropdown, } from '../void-settings-tsx/ModelDropdown.js';
 import { PastThreadsList } from './SidebarThreadSelector.js';
 import { VOID_CTRL_L_ACTION_ID } from '../../../actionIDs.js';
@@ -21,7 +21,6 @@ import { VOID_OPEN_SETTINGS_ACTION_ID } from '../../../voidSettingsPane.js';
 import { ChatMode, displayInfoOfProviderName, FeatureName, isFeatureNameDisabled } from '../../../../../../../workbench/contrib/void/common/voidSettingsTypes.js';
 import { ICommandService } from '../../../../../../../platform/commands/common/commands.js';
 import { WarningBox } from '../void-settings-tsx/WarningBox.js';
-import { getModelCapabilities, getIsReasoningEnabledState } from '../../../../common/modelCapabilities.js';
 import { AlertTriangle, File, Ban, Check, ChevronRight, Dot, FileIcon, Pencil, Undo, Undo2, X, Flag, Copy as CopyIcon, Info, CirclePlus, Ellipsis, CircleEllipsis, Folder, ALargeSmall, TypeOutline, Text, Image as ImageIcon } from 'lucide-react';
 import { ChatMessage, CheckpointEntry, StagingSelectionItem, ToolMessage } from '../../../../common/chatThreadServiceTypes.js';
 import { approvalTypeOfBuiltinToolName, BuiltinToolCallParams, BuiltinToolName, ToolName, LintErrorItem, ToolApprovalType, toolApprovalTypes } from '../../../../common/toolsServiceTypes.js';
@@ -143,7 +142,7 @@ export const IconLoading = ({ className = '' }: { className?: string }) => {
 export const CircleSpinner = ({ size = 14, className = '' }: { size?: number, className?: string }) => {
 	return (
 		<svg
-			className={`animate-spin ${className}`}
+			className={`animate-spin inline-block align-middle ${className}`}
 			width={size}
 			height={size}
 			viewBox="0 0 24 24"
@@ -166,104 +165,6 @@ export const CircleSpinner = ({ size = 14, className = '' }: { size?: number, cl
 		</svg>
 	);
 };
-
-
-// SLIDER ONLY:
-const ReasoningOptionSlider = ({ featureName }: { featureName: FeatureName }) => {
-	const accessor = useAccessor()
-
-	const voidSettingsService = accessor.get('IVoidSettingsService')
-	const voidSettingsState = useSettingsState()
-
-	const modelSelection = voidSettingsState.modelSelectionOfFeature[featureName]
-	const overridesOfModel = voidSettingsState.overridesOfModel
-
-	if (!modelSelection) return null
-
-	const { modelName, providerName } = modelSelection
-	const { reasoningCapabilities } = getModelCapabilities(providerName, modelName, overridesOfModel)
-	const { canTurnOffReasoning, reasoningSlider: reasoningBudgetSlider } = reasoningCapabilities || {}
-
-	const modelSelectionOptions = voidSettingsState.optionsOfModelSelection[featureName][providerName]?.[modelName]
-	const isReasoningEnabled = getIsReasoningEnabledState(featureName, providerName, modelName, modelSelectionOptions, overridesOfModel)
-
-	if (canTurnOffReasoning && !reasoningBudgetSlider) { // if it's just a on/off toggle without a power slider
-		return <div className='flex items-center gap-x-2'>
-			<span className='text-void-fg-3 text-xs pointer-events-none inline-block w-10 pr-1'>Thinking</span>
-			<VoidSwitch
-				size='xxs'
-				value={isReasoningEnabled}
-				onChange={(newVal) => {
-					const isOff = canTurnOffReasoning && !newVal
-					voidSettingsService.setOptionsOfModelSelection(featureName, modelSelection.providerName, modelSelection.modelName, { reasoningEnabled: !isOff })
-				}}
-			/>
-		</div>
-	}
-
-	if (reasoningBudgetSlider?.type === 'budget_slider') { // if it's a slider
-		const { min: min_, max, default: defaultVal } = reasoningBudgetSlider
-
-		const nSteps = 8 // only used in calculating stepSize, stepSize is what actually matters
-		const stepSize = Math.round((max - min_) / nSteps)
-
-		const valueIfOff = min_ - stepSize
-		const min = canTurnOffReasoning ? valueIfOff : min_
-		const value = isReasoningEnabled ? voidSettingsState.optionsOfModelSelection[featureName][modelSelection.providerName]?.[modelSelection.modelName]?.reasoningBudget ?? defaultVal
-			: valueIfOff
-
-		return <div className='flex items-center gap-x-2'>
-			<span className='text-void-fg-3 text-xs pointer-events-none inline-block w-10 pr-1'>Thinking</span>
-			<VoidSlider
-				width={50}
-				size='xs'
-				min={min}
-				max={max}
-				step={stepSize}
-				value={value}
-				onChange={(newVal) => {
-					const isOff = canTurnOffReasoning && newVal === valueIfOff
-					voidSettingsService.setOptionsOfModelSelection(featureName, modelSelection.providerName, modelSelection.modelName, { reasoningEnabled: !isOff, reasoningBudget: newVal })
-				}}
-			/>
-			<span className='text-void-fg-3 text-xs pointer-events-none'>{isReasoningEnabled ? `${value} tokens` : 'Thinking disabled'}</span>
-		</div>
-	}
-
-	if (reasoningBudgetSlider?.type === 'effort_slider') {
-
-		const { values, default: defaultVal } = reasoningBudgetSlider
-
-		const min = canTurnOffReasoning ? -1 : 0
-		const max = values.length - 1
-
-		const currentEffort = voidSettingsState.optionsOfModelSelection[featureName][modelSelection.providerName]?.[modelSelection.modelName]?.reasoningEffort ?? defaultVal
-		const valueIfOff = -1
-		const value = isReasoningEnabled && currentEffort ? values.indexOf(currentEffort) : valueIfOff
-
-		const currentEffortCapitalized = currentEffort.charAt(0).toUpperCase() + currentEffort.slice(1, Infinity)
-
-		return <div className='flex items-center gap-x-2'>
-			<span className='text-void-fg-3 text-xs pointer-events-none inline-block w-10 pr-1'>Thinking</span>
-			<VoidSlider
-				width={30}
-				size='xs'
-				min={min}
-				max={max}
-				step={1}
-				value={value}
-				onChange={(newVal) => {
-					const isOff = canTurnOffReasoning && newVal === valueIfOff
-					voidSettingsService.setOptionsOfModelSelection(featureName, modelSelection.providerName, modelSelection.modelName, { reasoningEnabled: !isOff, reasoningEffort: values[newVal] ?? undefined })
-				}}
-			/>
-			<span className='text-void-fg-3 text-xs pointer-events-none'>{isReasoningEnabled ? `${currentEffortCapitalized}` : 'Thinking disabled'}</span>
-		</div>
-	}
-
-	return null
-}
-
 
 
 const nameOfChatMode = {
@@ -291,18 +192,27 @@ const ChatModeDropdown = ({ className }: { className: string }) => {
 		voidSettingsService.setGlobalSetting('chatMode', newVal)
 	}, [voidSettingsService])
 
-	return <VoidCustomDropdownBox
-		className={className}
-		options={options}
-		selectedOption={settingsState.globalSettings.chatMode}
-		onChangeOption={onChangeOption}
-		getOptionDisplayName={(val) => nameOfChatMode[val]}
-		getOptionDropdownName={(val) => nameOfChatMode[val]}
-		getOptionDropdownDetail={(val) => detailOfChatMode[val]}
-		getOptionsEqual={(a, b) => a === b}
-		matchInputWidth={false}
-		offsetPx={-3}
-	/>
+	return (
+		<VoidCustomDropdownBox
+			className={`${className} hover:text-void-fg-2 transition-colors`}
+			options={options}
+			selectedOption={settingsState.globalSettings.chatMode}
+			onChangeOption={onChangeOption}
+
+			// MUST return string (not JSX)
+			getOptionDisplayName={(val) => nameOfChatMode[val]}
+
+			// MUST return string (not JSX)
+			getOptionDropdownName={(val) => nameOfChatMode[val]}
+
+			// description also remains a string
+			getOptionDropdownDetail={(val) => detailOfChatMode[val]}
+
+			getOptionsEqual={(a, b) => a === b}
+			matchInputWidth={false}
+			offsetPx={-3}
+		/>
+	)
 }
 
 
@@ -375,13 +285,12 @@ export const VoidChatArea: React.FC<VoidChatAreaProps> = ({
 		<div
 			ref={divRef}
 			className={`
-				gap-x-1
-                flex flex-col p-2 relative input text-left shrink-0
+				flex flex-col p-2 relative input text-left shrink-0
                 rounded-md
-                bg-void-bg-1
+                bg-[#323232]
 				transition-all duration-200
 				border ${isDragOver ? 'border-void-border-1 border-2 border-dashed bg-void-bg-2-alt/50 ring-2 ring-void-border-1/30' : 'border-void-border-3'} focus-within:border-void-border-1 hover:border-void-border-1
-				max-h-[80vh] overflow-y-auto
+				max-h-[50vh] overflow-y-auto
                 ${className}
             `}
 			onClick={(e) => {
@@ -418,26 +327,35 @@ export const VoidChatArea: React.FC<VoidChatAreaProps> = ({
 				)}
 			</div>
 
-			{/* Bottom row */}
+			{/* Bottom row - Horizontal layout matching reference */}
 			<div className='flex flex-row justify-between items-end gap-1'>
-			{showModelDropdown && (
-				<div className="flex flex-col gap-y-1">
-					<ReasoningOptionSlider featureName={featureName} />
-
+				{showModelDropdown && (
 					<div className="flex items-center flex-wrap gap-x-2 gap-y-1 text-nowrap">
-					{featureName === 'Chat' && (
-						<ChatModeDropdown className="text-xs text-void-fg-3 bg-transparent p-0 min-w-[100px]" />
-					)}
-					<ModelDropdown
-						featureName={featureName}
-						className="text-xs text-void-fg-3 bg-transparent p-0"
-					/>
+						{featureName === 'Chat' && (
+							 <ChatModeDropdown
+							 className="
+							   flex items-center gap-1
+							   px-2 py-1
+							   rounded-full
+							   bg-[#2b2b2b]
+							   text-xs text-white/80
+							   cursor-pointer select-none
+							   hover:bg-[#363636]
+							   transition
+							   min-w-[0]
+							   max-w-[140px]
+							   overflow-hidden whitespace-nowrap text-ellipsis
+							 "
+						   />
+						 )}
+						<ModelDropdown
+							featureName={featureName}
+							className="p-0 whitespace-nowrap overflow-hidden text-ellipsis max-w-[120px]"
+						/>
 					</div>
-				</div>
 				)}
 
 				<div className="flex items-center gap-2">
-
 					{imageButton}
 
 					{isStreaming && loadingIcon}
@@ -448,10 +366,12 @@ export const VoidChatArea: React.FC<VoidChatAreaProps> = ({
 						<ButtonSubmit
 							onClick={onSubmit}
 							disabled={isDisabled}
-						/>
+							className={`
+								disabled:bg-[#212121] disabled:text-gray-500
+							`}
+							/>
 					)}
 				</div>
-
 			</div>
 		</div>
 	);
@@ -461,50 +381,57 @@ export const VoidChatArea: React.FC<VoidChatAreaProps> = ({
 
 
 type ButtonProps = ButtonHTMLAttributes<HTMLButtonElement>
-const DEFAULT_BUTTON_SIZE = 22;
+const DEFAULT_BUTTON_SIZE = 20;
 export const ButtonSubmit = ({ className, disabled, ...props }: ButtonProps & Required<Pick<ButtonProps, 'disabled'>>) => {
 
 	return <button
 		type='button'
-		className={`rounded-full flex-shrink-0 flex-grow-0 flex items-center justify-center
-			${disabled ? 'bg-vscode-disabled-fg cursor-default' : 'bg-white cursor-pointer'}
+		className={`rounded-full w-5 h-5 flex-shrink-0 flex items-center justify-center
+			transition-all duration-200
+			${disabled ? 'bg-void-fg-4/30 cursor-default opacity-50' : 'bg-white hover:bg-white/90 cursor-pointer hover:scale-105 active:scale-95'}
 			${className}
 		`}
-		// data-tooltip-id='void-tooltip'
-		// data-tooltip-content={'Send'}
-		// data-tooltip-place='left'
+		data-tooltip-id='void-tooltip'
+		data-tooltip-content={'Send'}
+		data-tooltip-place='top'
 		{...props}
 	>
-		<IconArrowUp size={DEFAULT_BUTTON_SIZE} className="stroke-[2] p-[2px]" />
+		<IconArrowUp size={DEFAULT_BUTTON_SIZE} className="stroke-[2] p-[3px]" />
 	</button>
 }
 
 export const ButtonAddImage = ({ className, onClick, ...props }: ButtonHTMLAttributes<HTMLButtonElement>) => {
 	return <button
 		type='button'
-		className={`rounded-full flex-shrink-0 flex-grow-0 cursor-pointer flex items-center justify-center
-			bg-void-bg-3 hover:bg-void-bg-2 text-void-fg-3 hover:text-void-fg-2
+		className={`rounded-full w-5 h-5 flex-shrink-0 cursor-pointer flex items-center justify-center
+			bg-transparent border border-void-border-2 text-void-fg-3 hover:text-void-fg-2 hover:border-void-border-1
 			transition-all duration-200 hover:scale-105 active:scale-95
 			${className}
 		`}
 		onClick={onClick}
 		{...props}
-		title="Add image (or drag & drop)"
+		data-tooltip-id='void-tooltip'
+		data-tooltip-content='Add image (or drag & drop)'
+		data-tooltip-place='top'
 	>
-		<ImageIcon size={DEFAULT_BUTTON_SIZE} className="stroke-[2] p-[2px]" />
+		<ImageIcon size={DEFAULT_BUTTON_SIZE} className="stroke-[2] p-[3px]" />
 	</button>
 }
 
 export const ButtonStop = ({ className, ...props }: ButtonHTMLAttributes<HTMLButtonElement>) => {
 	return <button
-		className={`rounded-full flex-shrink-0 flex-grow-0 cursor-pointer flex items-center justify-center
-			bg-white
+		className={`rounded-full w-5 h-5 flex-shrink-0 cursor-pointer flex items-center justify-center
+			bg-white hover:bg-white/90
+			transition-all duration-200 hover:scale-105 active:scale-95
 			${className}
 		`}
 		type='button'
+		data-tooltip-id='void-tooltip'
+		data-tooltip-content='Stop'
+		data-tooltip-place='top'
 		{...props}
 	>
-		<IconSquare size={DEFAULT_BUTTON_SIZE} className="stroke-[3] p-[7px]" />
+		<IconSquare size={DEFAULT_BUTTON_SIZE} className="stroke-[3] p-[6px]" />
 	</button>
 }
 
@@ -869,158 +796,111 @@ export const ToolHeaderWrapper = ({
 	const isClickable = !!(isDropdown || onClick);
 	const isDesc1Clickable = !!desc1OnClick;
 
-	// Detect if running from icon tooltip (fallback detection)
-	const detectedIsRunning = iconTooltip === 'Running...' || isRunning;
-
-	const desc1HTML = (
-		<span
-			className={`ml-1 text-[9px] italic truncate text-void-fg-4
-				${isDesc1Clickable ? 'cursor-pointer' : ''}
-			`}
-			onClick={desc1OnClick}
-			{...desc1Info
-				? {
-						'data-tooltip-id': 'void-tooltip',
-						'data-tooltip-content': desc1Info,
-						'data-tooltip-place': 'top',
-						'data-tooltip-delay-show': 1000,
-				  }
-				: {}}
-		>
-			{desc1}
-		</span>
-	);
-
-	const showErrorBadge = isError && !icon;
-	const showRejectedBadge = isRejected && !icon;
-
-	const iconTooltipProps = iconTooltip
-		? {
-				'data-tooltip-id': 'void-tooltip',
-				'data-tooltip-content': iconTooltip,
-				'data-tooltip-place': 'top' as const,
-		  }
-		: {};
-
-	return (
-		<div className={`w-full relative ${className || ''}`}>
-
-			{/* header */}
-			<div
-				className={`relative flex items-center justify-between select-none
-					${isRejected ? 'line-through opacity-50' : ''}
-				`}
-			>
-			{/* left section */}
-			<div className="flex items-center gap-1 overflow-hidden min-w-0">
-				{/* clickable title section */}
-				<div
-					className={`flex items-center gap-0.5 min-w-0 overflow-hidden
-						${isClickable ? 'cursor-pointer' : ''}
-					`}
-					onClick={() => {
-						if (isDropdown) setIsOpen((v) => !v);
-						if (onClick) onClick();
-					}}
-				>
-					{isDropdown && (
-						<ChevronRight
-							className={`h-2.5 w-2.5 text-void-fg-4 transition-transform duration-150 ease-in-out ${
-								isExpanded ? 'rotate-90' : ''
-							}`}
-						/>
-					)}
-					{icon && (
-						<span
-							className="flex items-center justify-center text-void-fg-4"
-							{...iconTooltipProps}
-						>
-							{icon}
-						</span>
-					)}
-
-					{detectedIsRunning && typeof title === 'string' ? (
-						<TextShimmer
-							className="font-medium text-[10px] text-void-fg-3 truncate"
-							duration={1.5}
-							spread={3}
-						>
-							{title}
-						</TextShimmer>
-					) : (
-						<span className="font-medium text-[10px] text-void-fg-3 truncate">
-							{title}
-						</span>
-					)}
-
-					{!isDesc1Clickable && desc1HTML}
-				</div>
-
-				{isDesc1Clickable && desc1HTML}
-			</div>
-
-			{/* right section */}
-			<div className="flex items-center gap-1 flex-shrink-0 text-[9px] text-void-fg-4">
-					{info && (
-						<CircleEllipsis
-							className="opacity-60"
-							size={10}
-							data-tooltip-id="void-tooltip"
-							data-tooltip-content={info}
-							data-tooltip-place="top-end"
-						/>
-					)}
-
-					{showErrorBadge && (
-						<AlertTriangle
-							className="text-void-fg-4 opacity-70"
-							size={10}
-							data-tooltip-id="void-tooltip"
-							data-tooltip-content={'Error running tool'}
-							data-tooltip-place="top"
-						/>
-					)}
-					{showRejectedBadge && (
-						<Ban
-							className="text-void-fg-4 opacity-60"
-							size={10}
-							data-tooltip-id="void-tooltip"
-							data-tooltip-content={'Canceled'}
-							data-tooltip-place="top"
-						/>
-					)}
-
-					{desc2 && (
-						<span
-							onClick={desc2OnClick}
-							className="cursor-pointer"
-						>
-							{desc2}
-						</span>
-					)}
-
-					{numResults !== undefined && (
-						<span className="ml-0.5 text-void-fg-4 opacity-70">
-							{`${numResults}${hasNextPage ? '+' : ''} result${
-								numResults !== 1 ? 's' : ''
-							}`}
-						</span>
-					)}
-				</div>
-			</div>
-
-	{/* collapsible children */}
-	<div
-		className={`overflow-hidden text-void-fg-4 transition-all duration-200 ease-in-out
-			${isExpanded ? 'opacity-100' : 'opacity-0 max-h-0'}
+	const desc1HTML = <span
+		className={`text-void-fg-4 text-xs italic truncate ml-2
+			${isDesc1Clickable ? 'cursor-pointer hover:brightness-125 transition-all duration-150' : ''}
 		`}
-	>
-		{children}
-	</div>
+		onClick={desc1OnClick}
+		{...desc1Info ? {
+			'data-tooltip-id': 'void-tooltip',
+			'data-tooltip-content': desc1Info,
+			'data-tooltip-place': 'top',
+			'data-tooltip-delay-show': 1000,
+		} : {}}
+	>{desc1}</span>;
 
-			{bottomChildren}
+	const iconTooltipProps = iconTooltip ? {
+		'data-tooltip-id': 'void-tooltip',
+		'data-tooltip-content': iconTooltip,
+		'data-tooltip-place': 'top' as const,
+	} : {};
+
+	return (<div className=''>
+		<div className={`w-full border border-void-border-3 rounded px-2 py-1 bg-void-bg-3 overflow-hidden ${className}`}>
+			{/* header */}
+			<div className={`select-none flex items-center min-h-[24px]`}>
+				<div className={`flex items-center w-full gap-x-2 overflow-hidden justify-between ${isRejected ? 'line-through' : ''}`}>
+					{/* left */}
+					<div // container for if desc1 is clickable
+						className='ml-1 flex items-center overflow-hidden'
+					>
+						{/* title eg "> Edited File" */}
+						<div className={`
+							flex items-center min-w-0 overflow-hidden grow
+							${isClickable ? 'cursor-pointer hover:brightness-125 transition-all duration-150' : ''}
+						`}
+							onClick={() => {
+								if (isDropdown) { setIsOpen(v => !v); }
+								if (onClick) { onClick(); }
+							}}
+						>
+							{isDropdown && (<ChevronRight
+								className={`
+								text-void-fg-3 mr-0.5 h-4 w-4 flex-shrink-0 transition-transform duration-100 ease-[cubic-bezier(0.4,0,0.2,1)]
+								${isExpanded ? 'rotate-90' : ''}
+							`}
+							/>)}
+
+							{icon && <span
+								className="flex h-4 w-4 items-center justify-center text-void-fg-4 leading-none flex-shrink-0 mr-1"
+								{...iconTooltipProps}
+							>{icon}</span>}
+
+							<span className="text-void-fg-3 flex-shrink-0 leading-none">{title}</span>
+
+							{!isDesc1Clickable && desc1HTML}
+						</div>
+						{isDesc1Clickable && desc1HTML}
+					</div>
+
+					{/* right */}
+					<div className="flex items-center gap-x-2 flex-shrink-0">
+
+						{info && <CircleEllipsis
+							className='ml-2 text-void-fg-4 opacity-60 flex-shrink-0'
+							size={14}
+							data-tooltip-id='void-tooltip'
+							data-tooltip-content={info}
+							data-tooltip-place='top-end'
+						/>}
+
+						{isError && <AlertTriangle
+							className='text-void-warning opacity-90 flex-shrink-0'
+							size={14}
+							data-tooltip-id='void-tooltip'
+							data-tooltip-content={'Error running tool'}
+							data-tooltip-place='top'
+						/>}
+						{isRejected && <Ban
+							className='text-void-fg-4 opacity-90 flex-shrink-0'
+							size={14}
+							data-tooltip-id='void-tooltip'
+							data-tooltip-content={'Canceled'}
+							data-tooltip-place='top'
+						/>}
+						{desc2 && <span className="text-void-fg-4 text-xs" onClick={desc2OnClick}>
+							{desc2}
+						</span>}
+						{numResults !== undefined && (
+							<span className="text-void-fg-4 text-xs ml-auto mr-1">
+								{`${numResults}${hasNextPage ? '+' : ''} result${numResults !== 1 ? 's' : ''}`}
+							</span>
+						)}
+					</div>
+				</div>
+			</div>
+			{/* children */}
+			{<div
+				className={`overflow-hidden transition-all duration-200 ease-in-out ${isExpanded ? 'opacity-100 py-1' : 'max-h-0 opacity-0'}
+					text-void-fg-4 rounded-sm overflow-x-auto
+				  `}
+			//    bg-black bg-opacity-10 border border-void-border-4 border-opacity-50
+			>
+				{children}
+			</div>}
 		</div>
-	);
+		{bottomChildren}
+	</div>);
 };
 
 
@@ -1720,12 +1600,15 @@ type ToolStatusIconMeta = {
 	tooltip: string;
 }
 
-const TOOL_STATUS_ICON_SIZE = 12
+const TOOL_STATUS_ICON_SIZE = 14
 
 const getToolStatusIconMeta = (toolMessage: Pick<ChatMessage & { role: 'tool' }, 'name' | 'type' | 'mcpServerName'>): ToolStatusIconMeta | null => {
 	switch (toolMessage.type) {
 		case 'running_now':
-			return null
+			return {
+				icon: <CircleSpinner size={TOOL_STATUS_ICON_SIZE} className='text-void-fg-3 flex-shrink-0' />,
+				tooltip: 'Running...',
+			}
 		case 'tool_request':
 			return {
 				icon: <CirclePlus size={TOOL_STATUS_ICON_SIZE} className='text-void-fg-3 flex-shrink-0' />,
@@ -2171,13 +2054,13 @@ export const EditToolCardWrapper = ({ children, isRunning }: { children: React.R
 
 export const ToolChildrenWrapper = ({ children, className }: { children: React.ReactNode, className?: string }) => {
 	return <div className={`${className ? className : ''} cursor-default select-none`}>
-		<div className='px-1.5 min-w-full overflow-hidden'>
+		<div className='px-2 min-w-full overflow-hidden'>
 			{children}
 		</div>
 	</div>
 }
 export const CodeChildren = ({ children, className }: { children: React.ReactNode, className?: string }) => {
-	return <div className={`${className ?? ''} p-0.5 rounded-sm overflow-auto text-xs`}>
+	return <div className={`${className ?? ''} p-1 rounded-sm overflow-auto text-sm`}>
 		<div className='!select-text cursor-auto'>
 			{children}
 		</div>
@@ -2193,8 +2076,8 @@ export const ListableToolItem = ({ name, onClick, isSmall, className, showDot }:
 			`}
 		onClick={onClick}
 	>
-		{showDot === false ? null : <div className="flex-shrink-0"><svg className="w-0.5 h-0.5 opacity-60 mr-1 fill-current" viewBox="0 0 100 40"><rect x="0" y="15" width="100" height="10" /></svg></div>}
-		<div className={`text-xs ${isSmall ? 'italic text-void-fg-4 flex items-center' : ''}`}>{name}</div>
+		{showDot === false ? null : <div className="flex-shrink-0"><svg className="w-1 h-1 opacity-60 mr-1.5 fill-current" viewBox="0 0 100 40"><rect x="0" y="15" width="100" height="10" /></svg></div>}
+		<div className={`${isSmall ? 'italic text-void-fg-4 flex items-center' : ''}`}>{name}</div>
 	</div>
 }
 
@@ -2227,21 +2110,21 @@ const BottomChildren = ({ children, title }: { children: React.ReactNode, title:
 	const [isOpen, setIsOpen] = useState(false);
 	if (!children) return null;
 	return (
-		<div className="w-full px-1.5 mt-0.5">
+		<div className="w-full px-2 mt-0.5">
 			<div
 				className={`flex items-center cursor-pointer select-none transition-colors duration-150 pl-0 py-0.5 rounded group`}
 				onClick={() => setIsOpen(o => !o)}
 				style={{ background: 'none' }}
 			>
 				<ChevronRight
-					className={`mr-0.5 h-2.5 w-2.5 flex-shrink-0 transition-transform duration-100 text-void-fg-4 group-hover:text-void-fg-3 ${isOpen ? 'rotate-90' : ''}`}
+					className={`mr-1 h-3 w-3 flex-shrink-0 transition-transform duration-100 text-void-fg-4 group-hover:text-void-fg-3 ${isOpen ? 'rotate-90' : ''}`}
 				/>
-				<span className="font-medium text-void-fg-4 group-hover:text-void-fg-3 text-[10px]">{title}</span>
+				<span className="font-medium text-void-fg-4 group-hover:text-void-fg-3 text-xs">{title}</span>
 			</div>
 			<div
-				className={`overflow-hidden transition-all duration-200 ease-in-out ${isOpen ? 'opacity-100' : 'max-h-0 opacity-0'} text-[10px] pl-3`}
+				className={`overflow-hidden transition-all duration-200 ease-in-out ${isOpen ? 'opacity-100' : 'max-h-0 opacity-0'} text-xs pl-4`}
 			>
-				<div className="overflow-x-auto text-void-fg-4 opacity-90 border-l-2 border-void-warning px-1.5 py-0.5">
+				<div className="overflow-x-auto text-void-fg-4 opacity-90 border-l-2 border-void-warning px-2 py-0.5">
 					{children}
 				</div>
 			</div>
@@ -2312,6 +2195,10 @@ const CommandTool = ({ toolMessage, type, threadId }: { threadId: string } & ({
 	const commandService = accessor.get('ICommandService')
 	const terminalToolsService = accessor.get('ITerminalToolService')
 	const toolsService = accessor.get('IToolsService')
+
+	// Do not show tool_request type - approval buttons are shown separately
+	if (toolMessage.type === 'tool_request') return null
+
 	const isError = false
 	const title = getTitle(toolMessage)
 	const { desc1, desc1Info } = toolNameToDesc(toolMessage.name, toolMessage.params, accessor, toolMessage.rawParams)
@@ -2405,7 +2292,8 @@ const CommandTool = ({ toolMessage, type, threadId }: { threadId: string } & ({
 		if (type === 'run_command')
 			componentParams.children = <div ref={divRef} className='relative h-[300px] text-sm' />
 	}
-	else if (toolMessage.type === 'rejected' || toolMessage.type === 'tool_request') {
+	else if (toolMessage.type === 'rejected') {
+		// Nothing more is needed
 	}
 
 	return <>
@@ -2418,13 +2306,16 @@ const MCPToolWrapper = ({ toolMessage }: WrapperProps<string>) => {
 	const accessor = useAccessor()
 	const mcpService = accessor.get('IMCPService')
 
+	// Do not show tool_request type - approval buttons are shown separately
+	if (toolMessage.type === 'tool_request') return null
+
 	const title = getTitle(toolMessage)
 	const desc1 = removeMCPToolNamePrefix(toolMessage.name)
 	const statusIconMeta = getToolStatusIconMeta(toolMessage)
 
 	const isError = false
 	const isRejected = toolMessage.type === 'rejected'
-	const isRunning = toolMessage.type === 'running_now' || toolMessage.type === 'tool_request'
+	const isRunning = toolMessage.type === 'running_now'
 	const { rawParams, params } = toolMessage
 
 	const componentParams: ToolHeaderParams = {
@@ -2487,9 +2378,6 @@ const MCPToolWrapper = ({ toolMessage }: WrapperProps<string>) => {
 			</BottomChildren>
 		)
 	}
-	else if (toolMessage.type === 'tool_request') {
-		// Show pending state - no children needed, buttons will be shown separately
-	}
 	else if (toolMessage.type === 'running_now') {
 		// Show loading state - icon already shows spinner
 	}
@@ -2526,12 +2414,14 @@ const builtinToolNameToComponent: { [T in BuiltinToolName]: { resultWrapper: Res
 			}
 
 			let range: [number, number] | undefined = undefined
-			if (toolMessage.params.startLine !== null || toolMessage.params.endLine !== null) {
-				const start = toolMessage.params.startLine === null ? `1` : `${toolMessage.params.startLine}`
-				const end = toolMessage.params.endLine === null ? `` : `${toolMessage.params.endLine}`
-				const addStr = `(${start}-${end})`
+			const startLine = typeof toolMessage.params.startLine === 'number' ? toolMessage.params.startLine : null
+			const endLine = typeof toolMessage.params.endLine === 'number' ? toolMessage.params.endLine : null
+			if (startLine !== null || endLine !== null) {
+				const startStr = startLine === null ? '1' : `${startLine}`
+				const endStr = endLine === null ? '' : `${endLine}`
+				const addStr = `(${startStr}-${endStr})`
 				componentParams.desc1 += ` ${addStr}`
-				range = [params.startLine || 1, params.endLine || 1]
+				range = [startLine ?? 1, endLine ?? (startLine ?? 1)]
 			}
 
 			if (toolMessage.type === 'success') {
@@ -2921,12 +2811,15 @@ const builtinToolNameToComponent: { [T in BuiltinToolName]: { resultWrapper: Res
 		resultWrapper: ({ toolMessage }) => {
 			const accessor = useAccessor()
 			const commandService = accessor.get('ICommandService')
+
+			// Do not show tool_request type - approval buttons are shown separately
+			if (toolMessage.type === 'tool_request') return null
+
 			const isError = false
 			const isRejected = toolMessage.type === 'rejected'
 			const title = getTitle(toolMessage)
 			const { desc1, desc1Info } = toolNameToDesc(toolMessage.name, toolMessage.params, accessor, toolMessage.rawParams)
 			const statusIconMeta = getToolStatusIconMeta(toolMessage)
-
 
 			const { rawParams, params } = toolMessage
 			const componentParams: ToolHeaderParams = {
@@ -2960,9 +2853,6 @@ const builtinToolNameToComponent: { [T in BuiltinToolName]: { resultWrapper: Res
 			else if (toolMessage.type === 'running_now') {
 				// nothing more is needed
 			}
-			else if (toolMessage.type === 'tool_request') {
-				// nothing more is needed
-			}
 
 			return <ToolHeaderWrapper {...componentParams} />
 		}
@@ -2971,6 +2861,10 @@ const builtinToolNameToComponent: { [T in BuiltinToolName]: { resultWrapper: Res
 		resultWrapper: ({ toolMessage }) => {
 			const accessor = useAccessor()
 			const commandService = accessor.get('ICommandService')
+
+			// Do not show tool_request type - approval buttons are shown separately
+			if (toolMessage.type === 'tool_request') return null
+
 			const isFolder = toolMessage.params?.isFolder ?? false
 			const isError = false
 			const isRejected = toolMessage.type === 'rejected'
@@ -3008,10 +2902,6 @@ const builtinToolNameToComponent: { [T in BuiltinToolName]: { resultWrapper: Res
 				</BottomChildren>
 			}
 			else if (toolMessage.type === 'running_now') {
-				const { result } = toolMessage
-				componentParams.onClick = () => { voidOpenFileFn(params.uri, accessor) }
-			}
-			else if (toolMessage.type === 'tool_request') {
 				const { result } = toolMessage
 				componentParams.onClick = () => { voidOpenFileFn(params.uri, accessor) }
 			}
@@ -3619,7 +3509,6 @@ const EditToolSoFar = ({ toolCallSoFar }: { toolCallSoFar: RawToolCallObj }) => 
 	const desc1OnClick = uri ? () => voidOpenFileFn(uri, accessor) : undefined
 
 	// Show loading spinner icon
-	const TOOL_STATUS_ICON_SIZE = 12
 	const icon = <CircleSpinner size={TOOL_STATUS_ICON_SIZE} className='text-void-fg-3 flex-shrink-0' />
 	const iconTooltip = 'Running...'
 

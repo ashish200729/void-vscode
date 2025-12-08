@@ -818,37 +818,9 @@ class ChatThreadService extends Disposable implements IChatThreadService {
 					onText: ({ fullText, fullReasoning, toolCall, toolCalls }) => {
 						this._setStreamState(threadId, { isRunning: 'LLM', llmInfo: { displayContentSoFar: fullText, reasoningSoFar: fullReasoning, toolCallSoFar: toolCall ?? null }, interrupt: Promise.resolve(() => { if (llmCancelToken) this._llmMessageService.abort(llmCancelToken) }) })
 
-						const streamingToolCalls = toolCalls && toolCalls.length ? toolCalls : (toolCall ? [toolCall] : [])
-						if (streamingToolCalls.length === 0) return
-
-						const thread = this.state.allThreads[threadId]
-						if (!thread) return
-
-						const existingToolIds = new Set<string>(thread.messages
-							.filter(m => m.role === 'tool')
-							.map(m => m.id))
-
-						const mcpTools = this._mcpService.getMCPTools()
-
-						for (const streamingTool of streamingToolCalls) {
-							if (!isABuiltinToolName(streamingTool.name)) continue
-							if (!readOnlyToolNames.includes(streamingTool.name)) continue
-							if (existingToolIds.has(streamingTool.id)) continue
-
-							const mcpTool = mcpTools?.find(t => t.name === streamingTool.name)
-							this._addMessageToThread(threadId, {
-								role: 'tool',
-								type: 'running_now',
-								name: streamingTool.name,
-								params: {},
-								content: '(Loading...)',
-								result: null,
-								id: streamingTool.id,
-								rawParams: streamingTool.rawParams,
-								mcpServerName: mcpTool?.mcpServerName,
-							})
-							existingToolIds.add(streamingTool.id)
-						}
+						// NOTE: Removed the streaming placeholder tool logic that was here previously.
+						// It was adding "Reading file" placeholders during streaming that would stick around.
+						// These are now added only when tools are actually about to execute (see lines ~950-973)
 					},
 					onFinalMessage: async ({ fullText, fullReasoning, toolCall, toolCalls, anthropicReasoning, }) => {
 						resMessageIsDonePromise({ type: 'llmDone', toolCall, toolCalls, info: { fullText, fullReasoning, anthropicReasoning } }) // resolve with tool calls
@@ -948,6 +920,7 @@ class ChatThreadService extends Disposable implements IChatThreadService {
 					// Execute read/search tools in parallel
 					if (readSearchTools.length > 0) {
 						// 🚀 PRE-ADD all tool placeholders to UI IMMEDIATELY for instant visual feedback
+						// These placeholders show "Reading file" etc. while tools execute, then get replaced with results
 						// Batch all additions into a single state update for better performance
 						const placeholderTools: ChatMessage[] = []
 						for (const tool of readSearchTools) {
@@ -966,8 +939,10 @@ class ChatThreadService extends Disposable implements IChatThreadService {
 							})
 							existingToolIds.add(tool.id)
 						}
-					// Add all placeholders in a single batch update
-						this._addMessagesToThreadBatch(threadId, placeholderTools)
+					// Add all placeholders in a single batch update (only if there are new ones to add)
+						if (placeholderTools.length > 0) {
+							this._addMessagesToThreadBatch(threadId, placeholderTools)
+						}
 
 						// Execute all tools in parallel
 						const results = await Promise.all(readSearchTools.map(async (tool) => {
