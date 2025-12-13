@@ -119,9 +119,19 @@ export const IconWarning = ({ size, className = '' }: { size: number, className?
 	);
 };
 
+interface IconLoadingProps {
+	className?: string;
+	duration?: number;
+	spread?: number;
+}
 
-export const IconLoading = ({ className = '' }: { className?: string }) => {
+export const IconLoading = ({
+	className = '',
+	duration = 2,
+	spread = 2
+}: IconLoadingProps) => {
 	const [dotCount, setDotCount] = useState(1);
+	const text = 'Working';
 
 	useEffect(() => {
 		const intervalId = setInterval(() => {
@@ -130,14 +140,48 @@ export const IconLoading = ({ className = '' }: { className?: string }) => {
 		return () => clearInterval(intervalId);
 	}, []);
 
+	const dynamicSpread = useMemo(() => {
+		return (text.length + dotCount) * spread * 1.25;
+	}, [text, dotCount, spread]);
+
+	// Use inline styles for better compatibility across environments
+	const shimmerStyle: React.CSSProperties = {
+		display: 'inline-flex',
+		alignItems: 'center',
+		justifyContent: 'center',
+		fontWeight: 500,
+		fontSize: '0.675rem',
+		letterSpacing: '0.05em',
+		position: 'relative',
+		backgroundImage: `linear-gradient(90deg, rgba(0,0,0,0) 0%, rgba(0,0,0,0) calc(50% - ${dynamicSpread}px), rgba(255,255,255,0.7) 50%, rgba(0,0,0,0) calc(50% + ${dynamicSpread}px), rgba(0,0,0,0) 100%), linear-gradient(to right, var(--vscode-descriptionForeground, #71717a), var(--vscode-descriptionForeground, #71717a))`,
+		backgroundSize: '250% 100%, auto',
+		backgroundRepeat: 'no-repeat, padding-box',
+		backgroundClip: 'text',
+		WebkitBackgroundClip: 'text',
+		color: 'transparent',
+		animation: `iconLoadingShimmer ${duration}s linear infinite`,
+		willChange: 'background-position',
+	};
+
 	return (
-		<div
-			className={`inline-flex items-center justify-center font-medium text-sm tracking-wider text-gray-500 dark:text-gray-400 transition-all duration-200 ${className}`}
-		>
-			<span className="inline-block animate-pulse">Working{'.'.repeat(dotCount)}</span>
-		</div>
+		<>
+			<style>{`
+				@keyframes iconLoadingShimmer {
+					from { background-position: 100% center, 0 0; }
+					to { background-position: 0% center, 0 0; }
+				}
+			`}</style>
+			<span
+				className={className}
+				style={shimmerStyle}
+			>
+				{text}{'.'.repeat(dotCount)}
+			</span>
+		</>
 	);
 };
+
+
 
 export const CircleSpinner = ({ size = 14, className = '' }: { size?: number, className?: string }) => {
 	return (
@@ -1456,7 +1500,7 @@ const ProseWrapper = ({ children }: { children: React.ReactNode }) => {
 text-void-fg-1
 prose
 prose-sm
-text-[12px]
+text-[14px]
 break-words
 prose-p:block
 prose-p:leading-[1.5]
@@ -3730,17 +3774,20 @@ export const SidebarChat = () => {
 	// this is just if it's currently being generated, NOT if it's currently running
 	const toolIsGenerating = toolCallSoFar && !toolCallSoFar.isDone // show loading for slow tools (right now just edit)
 
-	// Detect when AI is processing after tool completion (isRunning but no content yet and no tool generating)
-	const isWaitingForAIResponse = isRunning && !displayContentSoFar && !reasoningSoFar && !toolIsGenerating
+	// Loading indicator should show when:
+	// 1. isRunning is truthy (LLM, tool, idle with pending work, or awaiting_user)
+	// 2. AND there's no visible content yet (no display content or reasoning tokens)
+	// 3. AND no tool is currently generating visible content (edit tool streaming)
+	// 4. AND we're not awaiting user action (tool approval buttons shown instead)
+	const hasVisibleStreamingContent = !!(displayContentSoFar || reasoningSoFar)
+	const isAwaitingUserAction = isRunning === 'awaiting_user'
+	const isWaitingForAIResponse = !!isRunning && !hasVisibleStreamingContent && !toolIsGenerating && !isAwaitingUserAction
 
 	// ----- SIDEBAR CHAT state (local) -----
 
 	// state of current message
 	const initVal = ''
 	const [instructionsAreEmpty, setInstructionsAreEmpty] = useState(!initVal)
-
-	// state to track when waiting for AI to start responding
-	const [waitingForFirstAIMessage, setWaitingForFirstAIMessage] = useState(false)
 
 	const isDisabled = instructionsAreEmpty || !!isFeatureNameDisabled('Chat', settingsState)
 
@@ -3794,8 +3841,6 @@ export const SidebarChat = () => {
 
 		try {
 			await chatThreadsService.addUserMessageAndStreamResponse({ userMessage, _images: imagesToSend.length > 0 ? imagesToSend : undefined, threadId })
-			// Set waiting state to true after sending message
-			setWaitingForFirstAIMessage(true)
 		} catch (e) {
 			console.error('Error while sending message in chat:', e)
 		}
@@ -3830,17 +3875,7 @@ export const SidebarChat = () => {
 
 	}, [chatThreadsState, threadId, textAreaRef, scrollContainerRef, isResolved])
 
-	// Clear waiting state when AI starts responding (first token arrives)
-	useEffect(() => {
-		if (waitingForFirstAIMessage && (displayContentSoFar || reasoningSoFar)) {
-			setWaitingForFirstAIMessage(false)
-		}
-	}, [displayContentSoFar, reasoningSoFar, waitingForFirstAIMessage])
 
-	// Reset waiting state when thread changes
-	useEffect(() => {
-		setWaitingForFirstAIMessage(false)
-	}, [threadId])
 
 
 
@@ -4003,8 +4038,8 @@ export const SidebarChat = () => {
 		{/* Generating tool */}
 		{generatingTool}
 
-		{/* loading indicator - show when waiting for first AI response OR when AI is processing after tool completion */}
-		{(waitingForFirstAIMessage || isWaitingForAIResponse) ? <ProseWrapper>
+		{/* loading indicator - show when AI is processing but no visible content yet */}
+		{isWaitingForAIResponse ? <ProseWrapper>
 			{<IconLoading className='opacity-50 text-sm' />}
 		</ProseWrapper> : null}
 

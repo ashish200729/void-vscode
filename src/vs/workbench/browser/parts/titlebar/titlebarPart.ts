@@ -20,6 +20,7 @@ import { isMacintosh, isWindows, isLinux, isWeb, isNative, platformLocale } from
 import { Color } from '../../../../base/common/color.js';
 import { EventType, EventHelper, Dimension, append, $, addDisposableListener, prepend, reset, getWindow, getWindowId, isAncestor, getActiveDocument, isHTMLElement } from '../../../../base/browser/dom.js';
 import { CustomMenubarControl } from './menubarControl.js';
+import { AgentEditorToggleControl } from './agentEditorToggleControl.js';
 import { IInstantiationService, ServicesAccessor } from '../../../../platform/instantiation/common/instantiation.js';
 import { Emitter, Event } from '../../../../base/common/event.js';
 import { IStorageService, StorageScope } from '../../../../platform/storage/common/storage.js';
@@ -54,7 +55,7 @@ import { IBaseActionViewItemOptions } from '../../../../base/browser/ui/actionba
 import { IHoverDelegate } from '../../../../base/browser/ui/hover/hoverDelegate.js';
 import { CommandsRegistry } from '../../../../platform/commands/common/commands.js';
 import { safeIntl } from '../../../../base/common/date.js';
-import { TitleBarVisibleContext } from '../../../common/contextkeys.js';
+import { TitleBarVisibleContext, AgentEditorModeContext } from '../../../common/contextkeys.js';
 
 export interface ITitleVariable {
 	readonly name: string;
@@ -262,6 +263,7 @@ export class BrowserTitlebarPart extends Part implements ITitlebarPart {
 	protected appIcon: HTMLElement | undefined;
 	private appIconBadge: HTMLElement | undefined;
 	protected menubar?: HTMLElement;
+	private agentEditorToggle: AgentEditorToggleControl | undefined;
 	private lastLayoutDimensions: Dimension | undefined;
 
 	private actionToolBar!: WorkbenchToolBar;
@@ -444,6 +446,34 @@ export class BrowserTitlebarPart extends Part implements ITitlebarPart {
 		// App Icon (Windows, Linux)
 		if ((isWindows || isLinux) && !hasNativeTitlebar(this.configurationService, this.titleBarStyle)) {
 			this.appIcon = prepend(this.leftContent, $('a.window-appicon'));
+		}
+
+		// Agent/Editor Toggle (main window only, custom titlebar)
+		if (!this.isAuxiliary && hasCustomTitlebar(this.configurationService, this.titleBarStyle)) {
+			// Determine initial mode from persisted sidebar position
+			// This ensures the toggle state matches the layout on restart
+			const currentSidebarPosition = this.configurationService.getValue<string>('workbench.sideBar.location');
+			const initialMode = currentSidebarPosition === 'right' ? 'agents' : 'editor';
+
+			this.agentEditorToggle = this._register(new AgentEditorToggleControl(initialMode));
+			// Insert after app icon (append to leftContent, which has appIcon at start)
+			append(this.leftContent, this.agentEditorToggle.element);
+
+			// Listen for mode changes to update sidebar position and context key
+			// Agent mode → sidebar to right, Editor mode → sidebar to left
+			const agentEditorModeContextKey = AgentEditorModeContext.bindTo(this.contextKeyService);
+
+			// Set the context key immediately at startup to match the toggle state
+			agentEditorModeContextKey.set(initialMode);
+
+			this._register(this.agentEditorToggle.onDidChangeMode(mode => {
+				// Update sidebar position
+				const newPosition = mode === 'agents' ? 'right' : 'left';
+				this.configurationService.updateValue('workbench.sideBar.location', newPosition);
+
+				// Update Agent/Editor mode context key for menu visibility
+				agentEditorModeContextKey.set(mode);
+			}));
 		}
 
 		// Draggable region that we can manipulate for #52522

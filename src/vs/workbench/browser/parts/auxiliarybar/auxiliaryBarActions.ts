@@ -9,7 +9,7 @@ import { Action2, MenuId, MenuRegistry, registerAction2 } from '../../../../plat
 import { ContextKeyExpr } from '../../../../platform/contextkey/common/contextkey.js';
 import { registerIcon } from '../../../../platform/theme/common/iconRegistry.js';
 import { Categories } from '../../../../platform/action/common/actionCommonCategories.js';
-import { AuxiliaryBarVisibleContext } from '../../../common/contextkeys.js';
+import { AuxiliaryBarVisibleContext, AgentEditorModeContext } from '../../../common/contextkeys.js';
 import { ViewContainerLocation, ViewContainerLocationToString } from '../../../common/views.js';
 import { ActivityBarPosition, IWorkbenchLayoutService, LayoutSettings, Parts } from '../../../services/layout/browser/layoutService.js';
 import { IPaneCompositePartService } from '../../../services/panecomposite/browser/panecomposite.js';
@@ -53,7 +53,14 @@ export class ToggleAuxiliaryBarAction extends Action2 {
 				{
 					id: MenuId.LayoutControlMenuSubmenu,
 					group: '0_workbench_layout',
-					order: 1
+					order: 1,
+					when: AgentEditorModeContext.isEqualTo('editor')
+				},
+				{
+					id: MenuId.LayoutControlMenuSubmenu,
+					group: '0_workbench_layout',
+					order: 2,
+					when: AgentEditorModeContext.isEqualTo('agents')
 				},
 				{
 					id: MenuId.MenubarAppearanceMenu,

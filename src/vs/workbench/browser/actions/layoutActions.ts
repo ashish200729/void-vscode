@@ -22,7 +22,7 @@ import { IPaneCompositePartService } from '../../services/panecomposite/browser/
 import { ToggleAuxiliaryBarAction } from '../parts/auxiliarybar/auxiliaryBarActions.js';
 import { TogglePanelAction } from '../parts/panel/panelActions.js';
 import { ICommandService } from '../../../platform/commands/common/commands.js';
-import { AuxiliaryBarVisibleContext, PanelAlignmentContext, PanelVisibleContext, SideBarVisibleContext, FocusedViewContext, InEditorZenModeContext, IsMainEditorCenteredLayoutContext, MainEditorAreaVisibleContext, IsMainWindowFullscreenContext, PanelPositionContext, IsAuxiliaryWindowFocusedContext, TitleBarStyleContext } from '../../common/contextkeys.js';
+import { AuxiliaryBarVisibleContext, PanelAlignmentContext, PanelVisibleContext, SideBarVisibleContext, FocusedViewContext, InEditorZenModeContext, IsMainEditorCenteredLayoutContext, MainEditorAreaVisibleContext, IsMainWindowFullscreenContext, PanelPositionContext, IsAuxiliaryWindowFocusedContext, TitleBarStyleContext, AgentEditorModeContext } from '../../common/contextkeys.js';
 import { Codicon } from '../../../base/common/codicons.js';
 import { ThemeIcon } from '../../../base/common/themables.js';
 import { DisposableStore } from '../../../base/common/lifecycle.js';
@@ -258,12 +258,53 @@ registerAction2(class extends Action2 {
 			f1: true,
 			toggled: MainEditorAreaVisibleContext,
 			// the workbench grid currently prevents us from supporting panel maximization with non-center panel alignment
-			precondition: ContextKeyExpr.and(IsAuxiliaryWindowFocusedContext.toNegated(), ContextKeyExpr.or(PanelAlignmentContext.isEqualTo('center'), PanelPositionContext.notEqualsTo('bottom')))
+			precondition: ContextKeyExpr.and(IsAuxiliaryWindowFocusedContext.toNegated(), ContextKeyExpr.or(PanelAlignmentContext.isEqualTo('center'), PanelPositionContext.notEqualsTo('bottom'))),
+			menu: [
+				{
+					id: MenuId.LayoutControlMenuSubmenu,
+					group: '0_workbench_layout',
+					order: 3,
+					when: AgentEditorModeContext.isEqualTo('agents')
+				}
+			]
 		});
 	}
 
 	run(accessor: ServicesAccessor): void {
 		accessor.get(IWorkbenchLayoutService).toggleMaximizedPanel();
+	}
+});
+
+// --- Toggle Agents Pane (Agent Mode Only)
+
+registerAction2(class ToggleAgentsPaneAction extends Action2 {
+
+	static readonly ID = 'workbench.action.toggleAgentsPane';
+
+	constructor() {
+		super({
+			id: 'workbench.action.toggleAgentsPane',
+			title: localize2('toggleAgentsPane', 'Toggle Agents Pane'),
+			toggled: {
+				condition: SideBarVisibleContext,
+				title: localize('agents', "Agents"),
+			},
+			category: Categories.View,
+			f1: true,
+			menu: [
+				{
+					id: MenuId.LayoutControlMenuSubmenu,
+					group: '0_workbench_layout',
+					order: 1,
+					when: AgentEditorModeContext.isEqualTo('agents')
+				}
+			]
+		});
+	}
+
+	run(accessor: ServicesAccessor): void {
+		const layoutService = accessor.get(IWorkbenchLayoutService);
+		layoutService.setPartHidden(layoutService.isVisible(Parts.SIDEBAR_PART), Parts.SIDEBAR_PART);
 	}
 });
 
@@ -303,7 +344,14 @@ export class ToggleSidebarVisibilityAction extends Action2 {
 				{
 					id: MenuId.LayoutControlMenuSubmenu,
 					group: '0_workbench_layout',
-					order: 0
+					order: 3,
+					when: AgentEditorModeContext.isEqualTo('editor')
+				},
+				{
+					id: MenuId.LayoutControlMenuSubmenu,
+					group: '0_workbench_layout',
+					order: 5,
+					when: AgentEditorModeContext.isEqualTo('agents')
 				},
 				{
 					id: MenuId.MenubarAppearanceMenu,
@@ -1476,32 +1524,29 @@ registerAction2(class CustomizeLayoutAction extends Action2 {
 				]
 			};
 		};
+
+		// Check current Agent/Editor mode (for future customization if needed)
+		// const isAgentMode = AgentEditorModeContext.getValue(contextKeyService) === 'agents';
+
+		// Filter visibility actions - only show core toggles
+		// Both modes show: Primary Side Bar, Void Side Bar (Chat), Panel
+		const filteredVisibilityActions = ToggleVisibilityActions.filter(item => {
+			// Filter out Menu Bar, Activity Bar, and Status Bar
+			if (item.id === 'workbench.action.toggleMenuBar' ||
+				item.id === ToggleActivityBarVisibilityActionId ||
+				item.id === ToggleStatusbarVisibilityAction.ID) {
+				return false;
+			}
+			return true;
+		});
+
+		// Return only visibility toggles - no sidebar position section
 		return [
 			{
 				type: 'separator',
 				label: localize('toggleVisibility', "Visibility")
 			},
-			...ToggleVisibilityActions.map(toQuickPickItem),
-			{
-				type: 'separator',
-				label: localize('sideBarPosition', "Primary Side Bar Position")
-			},
-			...MoveSideBarActions.map(toQuickPickItem),
-			{
-				type: 'separator',
-				label: localize('panelAlignment', "Panel Alignment")
-			},
-			...AlignPanelActions.map(toQuickPickItem),
-			{
-				type: 'separator',
-				label: localize('quickOpen', "Quick Input Position")
-			},
-			...QuickInputActions.map(toQuickPickItem),
-			{
-				type: 'separator',
-				label: localize('layoutModes', "Modes"),
-			},
-			...MiscLayoutOptions.map(toQuickPickItem),
+			...filteredVisibilityActions.map(toQuickPickItem),
 		];
 	}
 

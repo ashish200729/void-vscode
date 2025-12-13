@@ -199,7 +199,8 @@
 }
 
 .monaco-workbench .part.titlebar > .titlebar-container > .titlebar-center > .window-title > .command-center .action-item.command-center-center:only-child {
-	margin-left: 0; /* no margin if there is only the command center, without nav buttons */
+	margin-left: 0;
+	/* no margin if there is only the command center, without nav buttons */
 }
 
 .monaco-workbench .part.titlebar.inactive > .titlebar-container > .titlebar-center > .window-title > .command-center .action-item.command-center-center {
@@ -228,7 +229,8 @@
 
 .monaco-workbench .part.titlebar > .titlebar-container.counter-zoom .menubar .menubar-menu-button > .menubar-menu-items-holder.monaco-menu-container,
 .monaco-workbench .part.titlebar > .titlebar-container.counter-zoom .monaco-toolbar .dropdown-action-container {
-	zoom: var(--zoom-factor); /* helps to position the menu properly when counter zooming */
+	zoom: var(--zoom-factor);
+	/* helps to position the menu properly when counter zooming */
 }
 
 /* Resizer */
@@ -452,4 +454,115 @@
 	padding: 0 2px;
 	border-radius: 16px;
 	text-align: center;
+}
+
+/* Agent/Editor Toggle - Minimal Production Design */
+.monaco-workbench .part.titlebar .agent-editor-toggle {
+	position: relative;
+	display: flex;
+	align-items: center;
+	height: 22px;
+	background-color: rgba(255, 255, 255, 0.08);
+	/* Visible container background */
+	border-radius: 6px;
+	padding: 2px;
+	margin-left: 6px;
+	margin-right: 6px;
+	z-index: 2500;
+	-webkit-app-region: no-drag;
+	order: 2;
+	/* After app icon (order: 1), before/with menubar (order: 2) */
+	flex-shrink: 0;
+}
+
+/* Light theme container */
+.monaco-workbench .part.titlebar.light .agent-editor-toggle {
+	background-color: rgba(0, 0, 0, 0.08);
+}
+
+/* The Sliding Pill Background */
+.monaco-workbench .part.titlebar .agent-editor-toggle .toggle-background {
+	position: absolute;
+	top: 2px;
+	left: 2px;
+	bottom: 2px;
+	width: calc(50% - 2px);
+	background-color: rgba(255, 255, 255, 0.12);
+	/* Subtle neutral highlight */
+	border-radius: 4px;
+	transition: transform 0.15s ease-out;
+	z-index: 0;
+}
+
+/* Light theme pill */
+.monaco-workbench .part.titlebar.light .agent-editor-toggle .toggle-background {
+	background-color: rgba(0, 0, 0, 0.1);
+}
+
+/* Slide Positions */
+.monaco-workbench .part.titlebar .agent-editor-toggle.mode-editor .toggle-background {
+	transform: translateX(100%);
+}
+
+.monaco-workbench .part.titlebar .agent-editor-toggle.mode-agents .toggle-background {
+	transform: translateX(0);
+}
+
+/* The Buttons */
+.monaco-workbench .part.titlebar .agent-editor-toggle .toggle-button {
+	position: relative;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	padding: 2px 8px;
+	height: 100%;
+	border-radius: 4px;
+	font-size: 11px;
+	font-weight: 500;
+	cursor: pointer;
+	color: var(--vscode-titleBar-activeForeground);
+	background: transparent;
+	border: none;
+	transition: color 0.1s ease;
+	white-space: nowrap;
+	outline: none;
+	z-index: 1;
+}
+
+/* Active Button Text */
+.monaco-workbench .part.titlebar .agent-editor-toggle .toggle-button.active {
+	color: var(--vscode-titleBar-activeForeground);
+	font-weight: 600;
+	/* Slightly bolder to indicate selection */
+}
+
+/* Hover on inactive button */
+.monaco-workbench .part.titlebar .agent-editor-toggle .toggle-button:not(.active):hover {
+	color: var(--vscode-titleBar-activeForeground);
+	opacity: 0.8;
+}
+
+/* Focus */
+.monaco-workbench .part.titlebar .agent-editor-toggle .toggle-button:focus-visible {
+	outline: 1px solid var(--vscode-focusBorder);
+	outline-offset: -1px;
+}
+
+/* Hide icons - keep text only for minimal look */
+.monaco-workbench .part.titlebar .agent-editor-toggle .toggle-button .codicon {
+	display: none;
+}
+
+/* Inactive Window */
+.monaco-workbench .part.titlebar.inactive .agent-editor-toggle {
+	opacity: 0.5;
+}
+
+.monaco-workbench .part.titlebar.inactive .agent-editor-toggle .toggle-button {
+	color: var(--vscode-titleBar-inactiveForeground);
+}
+
+/* Fullscreen */
+.monaco-workbench.fullscreen .part.titlebar .agent-editor-toggle {
+	margin-left: 8px;
 }
