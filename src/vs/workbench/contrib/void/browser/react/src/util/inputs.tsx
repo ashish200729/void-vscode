@@ -1528,67 +1528,65 @@ export const VoidCustomDropdownBox = <T extends NonNullable<any>>({
 
 			{/* Dropdown Menu */}
 			{isOpen && (
-			<div
-				ref={refs.setFloating}
-				className="z-[100] rounded border border-void-border-2 bg-void-bg-1 shadow-lg"
-				style={{
-				position: strategy,
-				top: y ?? 0,
-				left: x ?? 0,
-				width: matchInputWidth
-					? (refs.reference.current instanceof HTMLElement ? refs.reference.current.offsetWidth : 'auto')
-					: 'max-content',
-				minWidth: refs.reference.current instanceof HTMLElement ? refs.reference.current.offsetWidth : 'auto',
-				maxWidth: '300px',
-				}}
-				onWheel={(e) => e.stopPropagation()}
-			>
-				<div className="overflow-auto max-h-80 py-1">
-				{options.map((option) => {
-					const thisOptionIsSelected = getOptionsEqual(option, selectedOption);
-					const optionName = getOptionDropdownName(option);
+				<div
+					ref={refs.setFloating}
+					className="z-[100] rounded border border-void-border-2 bg-void-bg-1 shadow-lg"
+					style={{
+						position: strategy,
+						top: y ?? 0,
+						left: x ?? 0,
+						width: matchInputWidth
+							? (refs.reference.current instanceof HTMLElement ? refs.reference.current.offsetWidth : 'auto')
+							: 'max-content',
+						minWidth: refs.reference.current instanceof HTMLElement ? refs.reference.current.offsetWidth : 'auto',
+						maxWidth: '300px',
+					}}
+					onWheel={(e) => e.stopPropagation()}
+				>
+					<div className="overflow-auto max-h-80 py-1">
+						{options.map((option) => {
+							const thisOptionIsSelected = getOptionsEqual(option, selectedOption);
+							const optionName = getOptionDropdownName(option);
 
-					return (
-					<div
-						key={optionName}
-						ref={(el) => {
-							if (hoveredOption && getOptionsEqual(option, hoveredOption)) {
-								setHoverItemRef(el);
-							}
-						}}
-						className={`
+							return (
+								<div
+									key={optionName}
+									ref={(el) => {
+										if (hoveredOption && getOptionsEqual(option, hoveredOption)) {
+											setHoverItemRef(el);
+										}
+									}}
+									className={`
 						flex items-center px-3 py-1.5 cursor-pointer
 						transition-colors
-						${
-							thisOptionIsSelected
-							? "bg-blue-600 text-white"
-							: "text-void-fg-2 hover:bg-void-bg-2"
-						}
+						${thisOptionIsSelected
+											? "bg-zinc-200/20 dark:bg-zinc-700/50 text-void-fg-1"
+											: "text-void-fg-2 hover:bg-zinc-100/10 dark:hover:bg-zinc-700/30"
+										}
 						`}
-						onClick={() => {
-						onChangeOption(option);
-						setIsOpen(false);
-						}}
-						onMouseEnter={() => setHoveredOption(option)}
-						onMouseLeave={() => setHoveredOption(null)}
-					>
-						{/* Custom option rendering or default */}
-						{renderOption ? (
-							renderOption(option, thisOptionIsSelected)
-						) : (
-							<span
-								className={`truncate ${
-								thisOptionIsSelected ? "text-white" : "text-void-fg-2"
-								}`}
-							>
-								{optionName}
-							</span>
-						)}
+									onClick={() => {
+										onChangeOption(option);
+										setIsOpen(false);
+									}}
+									onMouseEnter={() => setHoveredOption(option)}
+									onMouseLeave={() => setHoveredOption(null)}
+								>
+									{/* Custom option rendering or default */}
+									{renderOption ? (
+										renderOption(option, thisOptionIsSelected)
+									) : (
+										<span
+											className={`truncate ${thisOptionIsSelected ? "text-white" : "text-void-fg-2"
+												}`}
+										>
+											{optionName}
+										</span>
+									)}
+								</div>
+							);
+						})}
 					</div>
-					);
-				})}
 				</div>
-			</div>
 			)}
 
 			{/* Hover Info Panel */}

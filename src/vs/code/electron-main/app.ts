@@ -347,6 +347,48 @@ export class CodeApplication extends Disposable {
 
 		//#endregion
 
+		//#region Simple Browser - Strip frame-blocking headers
+
+		// Allow Simple Browser to display any website by removing X-Frame-Options
+		// and Content-Security-Policy frame-ancestors directives for ALL requests
+		// This enables the browser to work like a normal browser
+		session.defaultSession.webRequest.onHeadersReceived((details, callback) => {
+			const responseHeaders = details.responseHeaders ?? Object.create(null);
+			let headersModified = false;
+
+			// Remove X-Frame-Options header (case-insensitive)
+			for (const key of Object.keys(responseHeaders)) {
+				if (key.toLowerCase() === 'x-frame-options') {
+					delete responseHeaders[key];
+					headersModified = true;
+				}
+			}
+
+			// Modify Content-Security-Policy to remove frame-ancestors directive
+			for (const key of Object.keys(responseHeaders)) {
+				if (key.toLowerCase() === 'content-security-policy') {
+					const cspValues = responseHeaders[key];
+					if (Array.isArray(cspValues)) {
+						responseHeaders[key] = cspValues.map(csp =>
+							csp.replace(/frame-ancestors[^;]*(;|$)/gi, '')
+						);
+						headersModified = true;
+					} else if (typeof cspValues === 'string') {
+						responseHeaders[key] = cspValues.replace(/frame-ancestors[^;]*(;|$)/gi, '');
+						headersModified = true;
+					}
+				}
+			}
+
+			if (headersModified) {
+				return callback({ cancel: false, responseHeaders });
+			}
+
+			return callback({ cancel: false });
+		});
+
+		//#endregion
+
 		//#region Code Cache
 
 		type SessionWithCodeCachePathSupport = Session & {

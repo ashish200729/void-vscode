@@ -15,7 +15,7 @@ export interface ShowOptions {
 export class SimpleBrowserView extends Disposable {
 
 	public static readonly viewType = 'simpleBrowser.view';
-	private static readonly title = vscode.l10n.t("Simple Browser");
+	private static readonly title = vscode.l10n.t("Just Browser");
 
 	private static getWebviewLocalResourceRoots(extensionUri: vscode.Uri): readonly vscode.Uri[] {
 		return [
@@ -125,10 +125,11 @@ export class SimpleBrowserView extends Disposable {
 
 				<meta http-equiv="Content-Security-Policy" content="
 					default-src 'none';
-					font-src data:;
-					style-src ${this._webviewPanel.webview.cspSource};
+					font-src data: ${this._webviewPanel.webview.cspSource};
+					style-src ${this._webviewPanel.webview.cspSource} 'unsafe-inline';
 					script-src 'nonce-${nonce}';
-					frame-src *;
+					frame-src * https: http:;
+					img-src ${this._webviewPanel.webview.cspSource} data:;
 					">
 
 				<meta id="simple-browser-settings" data-settings="${escapeAttribute(JSON.stringify({
@@ -153,9 +154,21 @@ export class SimpleBrowserView extends Disposable {
 						<button
 							title="${vscode.l10n.t("Reload")}"
 							class="reload-button icon"><i class="codicon codicon-refresh"></i></button>
+
+						<button
+							title="${vscode.l10n.t("Home")}"
+							class="home-button icon"><i class="codicon codicon-home"></i></button>
 					</nav>
 
-					<input class="url-input" type="text">
+					<div class="url-bar">
+						<span class="url-bar-icon security-icon" title="${vscode.l10n.t("Connection is secure")}">
+							<i class="codicon codicon-lock"></i>
+						</span>
+						<input class="url-input" type="text" placeholder="${vscode.l10n.t("Search or enter URL")}">
+						<button class="url-bar-icon clear-button" title="${vscode.l10n.t("Clear")}">
+							<i class="codicon codicon-close"></i>
+						</button>
+					</div>
 
 					<nav class="controls">
 						<button
@@ -164,8 +177,18 @@ export class SimpleBrowserView extends Disposable {
 					</nav>
 				</header>
 				<div class="content">
+					<div class="loading-indicator">
+						<div class="loading-spinner"></div>
+						<div class="loading-text">${vscode.l10n.t("Loading...")}</div>
+					</div>
+					<div class="error-overlay">
+						<div class="error-icon"><i class="codicon codicon-error"></i></div>
+						<div class="error-title">${vscode.l10n.t("This page could not be loaded")}</div>
+						<div class="error-message"></div>
+						<button class="error-retry-button">${vscode.l10n.t("Retry")}</button>
+					</div>
 					<div class="iframe-focused-alert">${vscode.l10n.t("Focus Lock")}</div>
-					<iframe sandbox="allow-scripts allow-forms allow-same-origin allow-downloads"></iframe>
+					<iframe sandbox="allow-scripts allow-forms allow-same-origin allow-downloads allow-popups allow-popups-to-escape-sandbox allow-modals allow-orientation-lock allow-pointer-lock allow-presentation allow-top-navigation allow-top-navigation-by-user-activation"></iframe>
 				</div>
 
 				<script src="${mainJs}" nonce="${nonce}"></script>

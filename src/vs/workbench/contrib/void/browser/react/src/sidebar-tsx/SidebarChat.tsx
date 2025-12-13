@@ -21,7 +21,7 @@ import { VOID_OPEN_SETTINGS_ACTION_ID } from '../../../voidSettingsPane.js';
 import { ChatMode, displayInfoOfProviderName, FeatureName, isFeatureNameDisabled } from '../../../../../../../workbench/contrib/void/common/voidSettingsTypes.js';
 import { ICommandService } from '../../../../../../../platform/commands/common/commands.js';
 import { WarningBox } from '../void-settings-tsx/WarningBox.js';
-import { AlertTriangle, File, Ban, Check, ChevronRight, Dot, FileIcon, Pencil, Undo, Undo2, X, Flag, Copy as CopyIcon, Info, CirclePlus, Ellipsis, CircleEllipsis, Folder, ALargeSmall, TypeOutline, Text, Image as ImageIcon } from 'lucide-react';
+import { AlertTriangle, File, Ban, Check, ChevronRight, Dot, FileIcon, Pencil, Undo, Undo2, X, Flag, Copy as CopyIcon, Info, CirclePlus, Ellipsis, CircleEllipsis, Folder, ALargeSmall, TypeOutline, Text, Image as ImageIcon, Globe } from 'lucide-react';
 import { ChatMessage, CheckpointEntry, StagingSelectionItem, ToolMessage } from '../../../../common/chatThreadServiceTypes.js';
 import { approvalTypeOfBuiltinToolName, BuiltinToolCallParams, BuiltinToolName, ToolName, LintErrorItem, ToolApprovalType, toolApprovalTypes } from '../../../../common/toolsServiceTypes.js';
 import { CopyButton, EditToolAcceptRejectButtonsHTML, IconShell1, JumpToFileButton, JumpToTerminalButton, StatusIndicator, StatusIndicatorForApplyButton, useApplyStreamState, useEditToolStreamState } from '../markdown/ApplyBlockHoverButtons.js';
@@ -286,13 +286,14 @@ export const VoidChatArea: React.FC<VoidChatAreaProps> = ({
 			ref={divRef}
 			className={`
 				flex flex-col p-2 relative input text-left shrink-0
-                rounded-md
-                bg-[#323232]
+				rounded-md
+				bg-[var(--vscode-input-background)]
+				text-[var(--vscode-input-foreground)]
 				transition-all duration-200
 				border ${isDragOver ? 'border-void-border-1 border-2 border-dashed bg-void-bg-2-alt/50 ring-2 ring-void-border-1/30' : 'border-void-border-3'} focus-within:border-void-border-1 hover:border-void-border-1
-				max-h-[50vh] overflow-y-auto
-                ${className}
-            `}
+				max-h-[25vh] overflow-hidden
+				${className}
+			`}
 			onClick={(e) => {
 				onClickAnywhere?.()
 			}}
@@ -301,75 +302,74 @@ export const VoidChatArea: React.FC<VoidChatAreaProps> = ({
 			onDragLeave={onDragLeave}
 			onDrop={onDrop}
 		>
-			{/* Selections section */}
-			{showSelections && selections && setSelections && (
-				<SelectedFiles
-					type='staging'
-					selections={selections}
-					setSelections={setSelections}
-					showProspectiveSelections={showProspectiveSelections}
-				/>
-			)}
-
-			{/* Input section */}
-			<div className="relative w-full">
-				{children}
-
-				{/* Close button (X) if onClose is provided */}
-				{onClose && (
-					<div className='absolute -top-1 -right-1 cursor-pointer z-1'>
-						<IconX
-							size={12}
-							className="stroke-[2] opacity-80 text-void-fg-3 hover:brightness-95"
-							onClick={onClose}
-						/>
-					</div>
+			{/* Scrollable content */}
+			<div className="flex flex-col gap-2 min-h-0 overflow-y-auto pr-1 grow">
+				{/* Selections section */}
+				{showSelections && selections && setSelections && (
+					<SelectedFiles
+						type='staging'
+						selections={selections}
+						setSelections={setSelections}
+						showProspectiveSelections={showProspectiveSelections}
+					/>
 				)}
+				{/* Input section */}
+				<div className="relative w-full">
+					{children}
+					{/* Close button (X) if onClose is provided */}
+					{onClose && (
+						<button
+							type="button"
+							className='absolute -top-1 -right-1 cursor-pointer z-10 p-0.5 hover:bg-white/10 rounded transition-colors'
+							onClick={onClose}
+							aria-label="Close"
+						>
+							<IconX
+								size={12}
+								className="stroke-[2] opacity-80 text-void-fg-3 hover:brightness-95"
+							/>
+						</button>
+					)}
+				</div>
 			</div>
-
-			{/* Bottom row - Horizontal layout matching reference */}
-			<div className='flex flex-row justify-between items-end gap-1'>
+			{/* Bottom row - stays fixed while content scrolls */}
+			<div className='flex flex-row justify-between items-end gap-2 shrink-0 pt-2 flex-nowrap'>
 				{showModelDropdown && (
-					<div className="flex items-center flex-wrap gap-x-2 gap-y-1 text-nowrap">
+					<div className="flex items-center gap-x-2 gap-y-1 text-nowrap min-w-0 overflow-hidden">
 						{featureName === 'Chat' && (
-							 <ChatModeDropdown
-							 className="
-							   flex items-center gap-1
-							   px-2 py-1
-							   rounded-full
-							   bg-[#2b2b2b]
-							   text-xs text-white/80
-							   cursor-pointer select-none
-							   hover:bg-[#363636]
-							   transition
-							   min-w-[0]
-							   max-w-[140px]
-							   overflow-hidden whitespace-nowrap text-ellipsis
-							 "
-						   />
-						 )}
+							<ChatModeDropdown
+								className="
+									flex items-center gap-1
+									px-2 py-1
+									rounded-full
+									bg-[#3a3a3a]
+									text-xs text-white/80
+									cursor-pointer select-none
+									hover:bg-[#404040]
+									transition-colors
+									min-w-0
+									shrink
+									overflow-hidden whitespace-nowrap text-ellipsis
+								"
+							/>
+						)}
 						<ModelDropdown
 							featureName={featureName}
-							className="p-0 whitespace-nowrap overflow-hidden text-ellipsis max-w-[120px]"
+							className="w-[140px] sm:w-[180px] min-w-[100px] text-sm leading-5 px-2 shrink grow"
 						/>
 					</div>
 				)}
-
-				<div className="flex items-center gap-2">
+				<div className="flex items-center gap-2 ml-auto">
 					{imageButton}
-
 					{isStreaming && loadingIcon}
-
 					{isStreaming ? (
 						<ButtonStop onClick={onAbort} />
 					) : (
 						<ButtonSubmit
 							onClick={onSubmit}
 							disabled={isDisabled}
-							className={`
-								disabled:bg-[#212121] disabled:text-gray-500
-							`}
-							/>
+							className="bg-[#ffffff] disabled:text-white/50"
+						/>
 					)}
 				</div>
 			</div>
@@ -388,7 +388,7 @@ export const ButtonSubmit = ({ className, disabled, ...props }: ButtonProps & Re
 		type='button'
 		className={`rounded-full w-5 h-5 flex-shrink-0 flex items-center justify-center
 			transition-all duration-200
-			${disabled ? 'bg-void-fg-4/30 cursor-default opacity-50' : 'bg-white hover:bg-white/90 cursor-pointer hover:scale-105 active:scale-95'}
+			${disabled ? 'bg-void-fg-4/30 cursor-default opacity-50' : 'bg-white hover:bg-white/90 cursor-pointer'}
 			${className}
 		`}
 		data-tooltip-id='void-tooltip'
@@ -403,9 +403,9 @@ export const ButtonSubmit = ({ className, disabled, ...props }: ButtonProps & Re
 export const ButtonAddImage = ({ className, onClick, ...props }: ButtonHTMLAttributes<HTMLButtonElement>) => {
 	return <button
 		type='button'
-		className={`rounded-full w-5 h-5 flex-shrink-0 cursor-pointer flex items-center justify-center
-			bg-transparent border border-void-border-2 text-void-fg-3 hover:text-void-fg-2 hover:border-void-border-1
-			transition-all duration-200 hover:scale-105 active:scale-95
+		className={`w-6 h-6 flex-shrink-0 cursor-pointer flex items-center justify-center
+		 text-void-fg-3 hover:text-void-fg-2
+			transition-all duration-200
 			${className}
 		`}
 		onClick={onClick}
@@ -418,11 +418,29 @@ export const ButtonAddImage = ({ className, onClick, ...props }: ButtonHTMLAttri
 	</button>
 }
 
+export const ButtonOpenBrowser = ({ className, onClick, ...props }: ButtonHTMLAttributes<HTMLButtonElement>) => {
+	return <button
+		type='button'
+		className={`w-6 h-6 flex-shrink-0 cursor-pointer flex items-center justify-center
+		 text-void-fg-3 hover:text-void-fg-2
+			transition-all duration-200
+			${className}
+		`}
+		onClick={onClick}
+		{...props}
+		data-tooltip-id='void-tooltip'
+		data-tooltip-content='Open browser'
+		data-tooltip-place='top'
+	>
+		<Globe size={DEFAULT_BUTTON_SIZE} className="stroke-[2] p-[3px]" />
+	</button>
+}
+
 export const ButtonStop = ({ className, ...props }: ButtonHTMLAttributes<HTMLButtonElement>) => {
 	return <button
 		className={`rounded-full w-5 h-5 flex-shrink-0 cursor-pointer flex items-center justify-center
 			bg-white hover:bg-white/90
-			transition-all duration-200 hover:scale-105 active:scale-95
+			transition-all duration-200
 			${className}
 		`}
 		type='button'
@@ -1438,17 +1456,19 @@ const ProseWrapper = ({ children }: { children: React.ReactNode }) => {
 text-void-fg-1
 prose
 prose-sm
+text-[12px]
 break-words
 prose-p:block
-prose-p:leading-relaxed
-prose-p:my-2.5
+prose-p:leading-[1.5]
+prose-p:my-1.5
 prose-hr:my-4
 prose-hr:border-void-border-3/30
 prose-pre:my-2
-prose-pre:bg-void-bg-2-alt/50
+prose-pre:bg-void-bg-2-alt/40
 prose-pre:border
-prose-pre:border-void-border-3/20
+prose-pre:border-void-border-3/25
 prose-pre:rounded
+prose-pre:text-[12px]
 marker:text-inherit
 prose-ol:list-outside
 prose-ol:list-decimal
@@ -1462,19 +1482,20 @@ prose-li:my-1
 prose-code:before:content-none
 prose-code:after:content-none
 prose-code:text-void-fg-1
-prose-code:bg-void-bg-2-alt/40
-prose-code:px-1
+prose-code:bg-void-bg-2-alt/30
+prose-code:px-1.5
 prose-code:py-0.5
 prose-code:rounded
-prose-headings:prose-sm
-prose-headings:font-bold
+prose-code:text-[12px]
+prose-headings:prose-xs
+prose-headings:font-semibold
 prose-headings:text-void-fg-1
-prose-headings:my-3
+prose-headings:my-2
 prose-headings:leading-tight
 prose-blockquote:border-l-2
-prose-blockquote:border-l-void-border-1/50
+prose-blockquote:border-l-void-border-1/40
 prose-blockquote:pl-3
-prose-blockquote:my-3
+prose-blockquote:my-2.5
 prose-blockquote:italic
 prose-blockquote:text-void-fg-2
 
@@ -1537,24 +1558,128 @@ const AssistantMessageComponent = ({ chatMessage, isCheckpointGhost, isCommitted
 
 }
 
-const ReasoningWrapper = ({ isDoneReasoning, isStreaming, children }: { isDoneReasoning: boolean, isStreaming: boolean, children: React.ReactNode }) => {
-	const isDone = isDoneReasoning || !isStreaming
-	const isWriting = !isDone
-	const [isOpen, setIsOpen] = useState(isWriting)
-	useEffect(() => {
-		if (!isWriting) setIsOpen(false) // if just finished reasoning, close
-	}, [isWriting])
-	// Don't show loading icon inside reasoning block - the main loading indicator handles this
-	return <ToolHeaderWrapper title='Reasoning' desc1={''} isOpen={isOpen} onClick={() => setIsOpen(v => !v)}>
-		<ToolChildrenWrapper>
-			<div className='!select-text cursor-auto'>
-				{children}
-			</div>
-		</ToolChildrenWrapper>
-	</ToolHeaderWrapper>
+interface ReasoningWrapperProps {
+	isDoneReasoning: boolean;
+	isStreaming: boolean;
+	children: React.ReactNode;
 }
 
+const ReasoningWrapper = ({
+	isDoneReasoning,
+	isStreaming,
+	children
+}: ReasoningWrapperProps) => {
+	const isDone = isDoneReasoning || !isStreaming;
+	const isWriting = !isDone;
+	const [isOpen, setIsOpen] = useState(isWriting);
+	const contentRef = useRef<HTMLDivElement | null>(null);
 
+	// Close when reasoning is done
+	useEffect(() => {
+		if (!isWriting) {
+			setIsOpen(false);
+		}
+	}, [isWriting]);
+
+	// Auto-scroll to bottom while reasoning streams
+	useEffect(() => {
+		if (!isOpen) return;
+
+		const div = contentRef.current;
+		if (div) {
+			// Use requestAnimationFrame for smoother scrolling
+			requestAnimationFrame(() => {
+				div.scrollTop = div.scrollHeight;
+			});
+		}
+	}, [children, isOpen]);
+
+	const toggleOpen = () => {
+		setIsOpen(prev => !prev);
+	};
+
+	const handleKeyDown = (e: React.KeyboardEvent) => {
+		if (e.key === 'Enter' || e.key === ' ') {
+			e.preventDefault();
+			toggleOpen();
+		}
+	};
+
+	return (
+		<div style={{ margin: '5px 0' }}>
+			<button
+				onClick={toggleOpen}
+				onKeyDown={handleKeyDown}
+				aria-expanded={isOpen}
+				aria-controls="reasoning-content"
+				type="button"
+				style={{
+					display: 'flex',
+					alignItems: 'center',
+					gap: '8px',
+					background: 'none',
+					border: 'none',
+					padding: '4px 0',
+					cursor: 'pointer',
+					color: '#888',
+					fontSize: '13px',
+					transition: 'color 0.2s ease',
+					WebkitTapHighlightColor: 'transparent'
+				}}
+				onMouseEnter={(e) => {
+					e.currentTarget.style.color = '#aaa';
+				}}
+				onMouseLeave={(e) => {
+					e.currentTarget.style.color = '#888';
+				}}
+			>
+				<span
+					style={{
+						fontSize: '10px',
+						transition: 'transform 0.2s ease',
+						transform: isOpen ? 'rotate(0deg)' : 'rotate(0deg)',
+						display: 'inline-block'
+					}}
+					aria-hidden="true"
+				>
+					{isOpen ? '▼' : '▶'}
+				</span>
+				<span style={{ fontWeight: 500 }}>Reasoning</span>
+			</button>
+			{isOpen && (
+				<div
+					id="reasoning-content"
+					role="region"
+					aria-label="Reasoning content"
+					style={{
+						marginTop: '6px',
+						paddingLeft: '16px',
+						color: '#999',
+						fontSize: '14px',
+						lineHeight: '1.4',
+						maxHeight: '200px',
+						overflowY: 'auto',
+						scrollbarWidth: 'none',
+						msOverflowStyle: 'none',
+						scrollBehavior: 'smooth'
+					}}
+					className="no-scrollbar"
+					ref={contentRef}
+				>
+					<style>{`
+                        .no-scrollbar::-webkit-scrollbar {
+                            display: none !important;
+                            width: 0 !important;
+                            height: 0 !important;
+                            background: transparent !important;
+                        }
+                    `}</style>
+					{children}
+				</div>
+			)}
+		</div>
+	);
+};
 
 
 // should either be past or "-ing" tense, not present tense. Eg. when the LLM searches for something, the user expects it to say "I searched for X" or "I am searching for X". Not "I search X".
@@ -1735,7 +1860,7 @@ const toolNameToDesc = (toolName: BuiltinToolName, _toolParams: BuiltinToolCallP
 						try {
 							const uri = URI.parse(uriStr)
 							desc1Info = getRelative(uri, accessor)
-						} catch {}
+						} catch { }
 					}
 					return {
 						desc1: query ? `"${query}"` : '',
@@ -1950,32 +2075,35 @@ const toolNameToDesc = (toolName: BuiltinToolName, _toolParams: BuiltinToolCallP
 	}
 }
 
-const ToolRequestAcceptRejectButtons = ({ toolName }: { toolName: ToolName }) => {
+const ToolRequestAcceptRejectButtons = ({ toolName, toolId, threadId }: { toolName: ToolName, toolId: string, threadId: string }) => {
 	const accessor = useAccessor()
 	const chatThreadsService = accessor.get('IChatThreadService')
 	const metricsService = accessor.get('IMetricsService')
-	const voidSettingsService = accessor.get('IVoidSettingsService')
-	const voidSettingsState = useSettingsState()
+	const streamState = useChatThreadsStreamState(threadId)
+
+	const isAwaiting = streamState?.isRunning === 'awaiting_user'
+	const pendingToolRequestId = isAwaiting ? streamState.pendingToolRequestId : undefined
+	const isDifferentPending = !!(pendingToolRequestId && pendingToolRequestId !== toolId)
+	const isDisabled = !isAwaiting || isDifferentPending
 
 	const onAccept = useCallback(() => {
 		try { // this doesn't need to be wrapped in try/catch anymore
-			const threadId = chatThreadsService.state.currentThreadId
-			chatThreadsService.approveLatestToolRequest(threadId)
+			chatThreadsService.approveLatestToolRequest(threadId, toolId)
 			metricsService.capture('Tool Request Accepted', {})
 		} catch (e) { console.error('Error while approving message in chat:', e) }
-	}, [chatThreadsService, metricsService])
+	}, [chatThreadsService, metricsService, threadId, toolId])
 
 	const onReject = useCallback(() => {
 		try {
-			const threadId = chatThreadsService.state.currentThreadId
-			chatThreadsService.rejectLatestToolRequest(threadId)
+			chatThreadsService.rejectLatestToolRequest(threadId, toolId)
 		} catch (e) { console.error('Error while approving message in chat:', e) }
 		metricsService.capture('Tool Request Rejected', {})
-	}, [chatThreadsService, metricsService])
+	}, [chatThreadsService, metricsService, threadId, toolId])
 
 	const approveButton = (
 		<button
 			onClick={onAccept}
+			disabled={isDisabled}
 			className={`
                 px-1.5 py-0.5
                 bg-[var(--vscode-button-background)]
@@ -1983,6 +2111,7 @@ const ToolRequestAcceptRejectButtons = ({ toolName }: { toolName: ToolName }) =>
                 hover:bg-[var(--vscode-button-hoverBackground)]
                 rounded
                 text-xs font-medium
+				${isDisabled ? 'opacity-60 cursor-not-allowed' : ''}
             `}
 		>
 			Approve
@@ -1992,6 +2121,7 @@ const ToolRequestAcceptRejectButtons = ({ toolName }: { toolName: ToolName }) =>
 	const cancelButton = (
 		<button
 			onClick={onReject}
+			disabled={isDisabled}
 			className={`
                 px-1.5 py-0.5
                 bg-[var(--vscode-button-secondaryBackground)]
@@ -1999,6 +2129,7 @@ const ToolRequestAcceptRejectButtons = ({ toolName }: { toolName: ToolName }) =>
                 hover:bg-[var(--vscode-button-secondaryHoverBackground)]
                 rounded
                 text-xs font-medium
+				${isDisabled ? 'opacity-60 cursor-not-allowed' : ''}
             `}
 		>
 			Cancel
@@ -2010,11 +2141,45 @@ const ToolRequestAcceptRejectButtons = ({ toolName }: { toolName: ToolName }) =>
 		<ToolApprovalTypeSwitch size='xs' approvalType={approvalType} desc={`Auto-approve ${approvalType}`} />
 	</div> : null
 
-	return <div className="flex gap-1.5 mx-0.5 items-center">
+	return <div className="flex gap-1.5 items-center flex-wrap">
 		{approveButton}
 		{cancelButton}
 		{approvalToggle}
 	</div>
+}
+
+const PendingToolCard = ({ toolMessage }: { toolMessage: ToolMessage<ToolName> }) => {
+	const accessor = useAccessor()
+	const statusIconMeta = getToolStatusIconMeta({ name: toolMessage.name, type: 'tool_request', mcpServerName: toolMessage.mcpServerName })
+	const hasParams = 'params' in toolMessage && !!(toolMessage as any).params
+	const { desc1, desc1Info } = isABuiltinToolName(toolMessage.name) && hasParams
+		? toolNameToDesc(toolMessage.name as BuiltinToolName, (toolMessage as any).params, accessor, toolMessage.rawParams)
+		: { desc1: toolMessage.mcpServerName || '', desc1Info: undefined }
+
+	const componentParams: ToolHeaderParams = {
+		title: getTitle({ name: toolMessage.name, type: 'tool_request', mcpServerName: toolMessage.mcpServerName }),
+		desc1,
+		desc1Info,
+		icon: statusIconMeta?.icon,
+		iconTooltip: statusIconMeta?.tooltip,
+		isRejected: false,
+		isRunning: false,
+		info: 'Awaiting approval',
+	}
+
+	return <ToolHeaderWrapper {...componentParams} />
+}
+
+const PendingToolRequest = ({ toolMessage, threadId }: { toolMessage: ToolMessage<ToolName>, threadId: string }) => {
+	return (
+		<div className="my-0.5 rounded-sm border border-void-border-2 bg-void-bg-2/60 px-2 py-1.5 flex flex-col gap-1.5">
+			<PendingToolCard toolMessage={toolMessage} />
+			<div className="flex items-center justify-between gap-2 flex-wrap">
+				<div className="text-void-fg-4 text-xs">Awaiting approval</div>
+				<ToolRequestAcceptRejectButtons toolName={toolMessage.name} toolId={toolMessage.id} threadId={threadId} />
+			</div>
+		</div>
+	)
 }
 
 export const EditToolCardWrapper = ({ children, isRunning }: { children: React.ReactNode, isRunning?: boolean }) => (
@@ -3006,26 +3171,26 @@ const builtinToolNameToComponent: { [T in BuiltinToolName]: { resultWrapper: Res
 				iconTooltip: statusIconMeta?.tooltip,
 			}
 
-		if (toolMessage.type === 'success') {
-			const { persistentTerminalId } = params
-			componentParams.desc1 = persistentTerminalNameOfId(persistentTerminalId)
-			componentParams.onClick = () => terminalToolsService.focusPersistentTerminal(persistentTerminalId)
-		}
-		else if (toolMessage.type === 'tool_error') {
-			const { result } = toolMessage
-			componentParams.bottomChildren = <BottomChildren title='Error'>
-				<CodeChildren>
-					{result}
-				</CodeChildren>
-			</BottomChildren>
-		}
-		else if (toolMessage.type === 'running_now') {
-			// Show loading state - no additional children needed, icon already shows spinner
-		}
+			if (toolMessage.type === 'success') {
+				const { persistentTerminalId } = params
+				componentParams.desc1 = persistentTerminalNameOfId(persistentTerminalId)
+				componentParams.onClick = () => terminalToolsService.focusPersistentTerminal(persistentTerminalId)
+			}
+			else if (toolMessage.type === 'tool_error') {
+				const { result } = toolMessage
+				componentParams.bottomChildren = <BottomChildren title='Error'>
+					<CodeChildren>
+						{result}
+					</CodeChildren>
+				</BottomChildren>
+			}
+			else if (toolMessage.type === 'running_now') {
+				// Show loading state - no additional children needed, icon already shows spinner
+			}
 
-		return <ToolHeaderWrapper {...componentParams} />
+			return <ToolHeaderWrapper {...componentParams} />
+		},
 	},
-},
 };
 
 
@@ -3140,24 +3305,18 @@ const _ChatBubble = ({ threadId, chatMessage, currCheckpointIdx, isCommitted, me
 		}
 
 		return (
-			<>
-				<div className={`transition-opacity duration-300 ease-in-out my-0.25 ${isCheckpointGhost ? 'opacity-50' : 'opacity-100'}`}>
-					<ErrorBoundary>
-						<ToolResultWrapper
+			<div className={`transition-opacity duration-300 ease-in-out my-0.25 ${isCheckpointGhost ? 'opacity-50' : 'opacity-100'}`}>
+				<ErrorBoundary>
+					{chatMessage.type === 'tool_request'
+						? <PendingToolRequest toolMessage={chatMessage} threadId={threadId} />
+						: <ToolResultWrapper
 							toolMessage={chatMessage}
 							messageIdx={messageIdx}
 							threadId={threadId}
 						/>
-					</ErrorBoundary>
-				</div>
-				{chatMessage.type === 'tool_request' && (
-					<div className={`my-0.25 ${isCheckpointGhost ? 'opacity-50 pointer-events-none' : ''}`}>
-						<ErrorBoundary>
-							<ToolRequestAcceptRejectButtons toolName={chatMessage.name} />
-						</ErrorBoundary>
-					</div>
-				)}
-			</>
+					}
+				</ErrorBoundary>
+			</div>
 		)
 	}
 
@@ -3180,47 +3339,47 @@ const _ChatBubble = ({ threadId, chatMessage, currCheckpointIdx, isCommitted, me
 }
 
 type ParallelToolGroupProps = {
-    messages: Array<{ message: ChatMessage, index: number }>,
-    previousMessages: ChatMessage[],
-    threadId: string,
-    currCheckpointIdx: number | undefined,
-    isRunning: IsRunningType,
-    scrollContainerRef: React.MutableRefObject<HTMLDivElement | null>,
+	messages: Array<{ message: ChatMessage, index: number }>,
+	previousMessages: ChatMessage[],
+	threadId: string,
+	currCheckpointIdx: number | undefined,
+	isRunning: IsRunningType,
+	scrollContainerRef: React.MutableRefObject<HTMLDivElement | null>,
 }
 
 const ParallelToolGroup = ({
-    messages,
-    previousMessages,
-    threadId,
-    currCheckpointIdx,
-    isRunning,
-    scrollContainerRef,
+	messages,
+	previousMessages,
+	threadId,
+	currCheckpointIdx,
+	isRunning,
+	scrollContainerRef,
 }: ParallelToolGroupProps) => {
-    return (
-        <>
-            {messages.map(({ index }) => {
-                const previousMessage = index > 0 ? previousMessages[index - 1] : null
-                const previousRole = previousMessage?.role
-                const currentRole = previousMessages[index]?.role
-                const addGap = (previousRole === 'user' && currentRole === 'assistant') ||
-                               (previousRole === 'assistant' && currentRole === 'user')
+	return (
+		<>
+			{messages.map(({ index }) => {
+				const previousMessage = index > 0 ? previousMessages[index - 1] : null
+				const previousRole = previousMessage?.role
+				const currentRole = previousMessages[index]?.role
+				const addGap = (previousRole === 'user' && currentRole === 'assistant') ||
+					(previousRole === 'assistant' && currentRole === 'user')
 
-                return (
-                    <div key={`tool-${index}`} className={addGap ? 'mt-2' : 'mt-1'}>
-                        <ChatBubble
-                            currCheckpointIdx={currCheckpointIdx}
-                            chatMessage={previousMessages[index]}
-                            messageIdx={index}
-                            isCommitted={true}
-                            chatIsRunning={isRunning}
-                            threadId={threadId}
-                            _scrollToBottom={() => scrollToBottom(scrollContainerRef)}
-                        />
-                    </div>
-                )
-            })}
-        </>
-    )
+				return (
+					<div key={`tool-${index}`} className={addGap ? 'mt-2' : 'mt-1'}>
+						<ChatBubble
+							currCheckpointIdx={currCheckpointIdx}
+							chatMessage={previousMessages[index]}
+							messageIdx={index}
+							isCommitted={true}
+							chatIsRunning={isRunning}
+							threadId={threadId}
+							_scrollToBottom={() => scrollToBottom(scrollContainerRef)}
+						/>
+					</div>
+				)
+			})}
+		</>
+	)
 }
 
 const CommandBarInChat = () => {
@@ -3760,7 +3919,7 @@ export const SidebarChat = () => {
 
 				// Add extra spacing if switching between user and assistant messages
 				const shouldAddGap = (previousRole === 'user' && currentRole === 'assistant') ||
-									 (previousRole === 'assistant' && currentRole === 'user')
+					(previousRole === 'assistant' && currentRole === 'user')
 
 				return (
 					<div key={`single-${i}`} className={shouldAddGap ? 'mt-2' : 'mt-1'}>
@@ -3966,6 +4125,10 @@ export const SidebarChat = () => {
 		fileInputRef.current?.click()
 	}, [])
 
+	const handleBrowserButtonClick = useCallback(() => {
+		commandService.executeCommand('simpleBrowser.show')
+	}, [commandService])
+
 	const chatAreaRef = useRef<HTMLDivElement | null>(null)
 
 	const inputChatArea = <VoidChatArea
@@ -3991,6 +4154,7 @@ export const SidebarChat = () => {
 					className='hidden'
 				/>
 				<ButtonAddImage onClick={handleImageButtonClick} />
+				<ButtonOpenBrowser onClick={handleBrowserButtonClick} />
 			</>
 		}
 		onDragEnter={dragHandlers.handleDragEnter}
@@ -4000,7 +4164,7 @@ export const SidebarChat = () => {
 		isDragOver={isDragOver}
 	>
 		<div
-			className='w-full min-h-[81px]'
+			className='w-full min-h-[40px]'
 			onDragEnter={dragHandlers.handleDragEnter}
 			onDragOver={dragHandlers.handleDragOver}
 			onDragLeave={dragHandlers.handleDragLeave}
@@ -4008,7 +4172,7 @@ export const SidebarChat = () => {
 		>
 			<VoidInputBox2
 				enableAtToMention
-				className={`min-h-[81px] px-0.5 py-0.5`}
+				className={`min-h-[40px] px-0.5 py-0.5 !overflow-hidden resize-none`}
 				placeholder={`@ to mention, ${keybindingString ? `${keybindingString} to add a selection. ` : ''}Enter instructions...`}
 				onChangeText={onChangeText}
 				onKeyDown={onKeyDown}

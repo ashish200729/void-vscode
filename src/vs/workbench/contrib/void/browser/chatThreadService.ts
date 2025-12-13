@@ -195,6 +195,7 @@ export type ThreadStreamState = {
 		error?: undefined;
 		llmInfo?: undefined;
 		toolInfo?: undefined;
+		pendingToolRequestId?: string;
 		interrupt?: undefined;
 	} | {
 		isRunning: 'idle';
@@ -283,8 +284,8 @@ export interface IChatThreadService {
 	addUserMessageAndStreamResponse({ userMessage, _chatSelections, _images, threadId }: { userMessage: string, _chatSelections?: StagingSelectionItem[], _images?: string[], threadId: string }): Promise<void>;
 
 	// approve/reject
-	approveLatestToolRequest(threadId: string): void;
-	rejectLatestToolRequest(threadId: string): void;
+	approveLatestToolRequest(threadId: string, toolId?: string): void;
+	rejectLatestToolRequest(threadId: string, toolId?: string): void;
 
 	// jump to history
 	jumpToCheckpointBeforeMessageIdx(opts: { threadId: string, messageIdx: number, jumpToUserModified: boolean }): void;
@@ -445,7 +446,7 @@ class ChatThreadService extends Disposable implements IChatThreadService {
 			const lastMessage = messages && messages[messages.length - 1]
 			// if awaiting user but stream state doesn't indicate it (happens if restart Void)
 			if (lastMessage && lastMessage.role === 'tool' && lastMessage.type === 'tool_request')
-				this._setStreamState(threadId, { isRunning: 'awaiting_user', })
+				this._setStreamState(threadId, { isRunning: 'awaiting_user', pendingToolRequestId: lastMessage.id })
 
 			// if running now but stream state doesn't indicate it (happens if restart Void), cancel that last tool
 			if (lastMessage && lastMessage.role === 'tool' && lastMessage.type === 'running_now') {
@@ -521,33 +522,39 @@ class ChatThreadService extends Disposable implements IChatThreadService {
 		this._addMessageToThread(threadId, tool)
 	}
 
-	approveLatestToolRequest(threadId: string) {
+	private _findPendingToolRequest(thread: ThreadType | undefined, toolId?: string): (ChatMessage & { role: 'tool', type: 'tool_request' }) | undefined {
+		if (!thread) return undefined
+		for (let i = thread.messages.length - 1; i >= 0; i--) {
+			const msg = thread.messages[i]
+			if (msg.role === 'tool' && msg.type === 'tool_request') {
+				if (!toolId || msg.id === toolId) {
+					return msg
+				}
+			}
+		}
+		return undefined
+	}
+
+	approveLatestToolRequest(threadId: string, toolId?: string) {
 		const thread = this.state.allThreads[threadId]
 		if (!thread) return // should never happen
 
-		const lastMsg = thread.messages[thread.messages.length - 1]
-		if (!(lastMsg.role === 'tool' && lastMsg.type === 'tool_request')) return // should never happen
-
-		const callThisToolFirst: ToolMessage<ToolName> = lastMsg
+		const callThisToolFirst = this._findPendingToolRequest(thread, toolId)
+		if (!callThisToolFirst) return
 
 		this._wrapRunAgentToNotify(
 			this._runChatAgent({ callThisToolFirst, threadId, ...this._currentModelSelectionProps() })
 			, threadId
 		)
 	}
-	rejectLatestToolRequest(threadId: string) {
+	rejectLatestToolRequest(threadId: string, toolId?: string) {
 		const thread = this.state.allThreads[threadId]
 		if (!thread) return // should never happen
 
-		const lastMsg = thread.messages[thread.messages.length - 1]
+		const toolRequest = this._findPendingToolRequest(thread, toolId)
+		if (!toolRequest) return
 
-		let params: ToolCallParams<ToolName>
-		if (lastMsg.role === 'tool' && lastMsg.type !== 'invalid_params') {
-			params = lastMsg.params
-		}
-		else return
-
-		const { name, id, rawParams, mcpServerName } = lastMsg
+		const { name, id, rawParams, mcpServerName, params } = toolRequest
 
 		const errorMessage = this.toolErrMsgs.rejected
 		this._updateLatestTool(threadId, { role: 'tool', type: 'rejected', params: params, name: name, content: errorMessage, result: null, id, rawParams, mcpServerName })
@@ -576,13 +583,12 @@ class ChatThreadService extends Disposable implements IChatThreadService {
 		}
 		// reject the tool for the user if relevant
 		else if (this.streamState[threadId]?.isRunning === 'awaiting_user') {
-			this.rejectLatestToolRequest(threadId)
+			const pendingToolRequestId = this.streamState[threadId]?.pendingToolRequestId
+			this.rejectLatestToolRequest(threadId, pendingToolRequestId)
 		}
 		else if (this.streamState[threadId]?.isRunning === 'idle') {
 			// do nothing
 		}
-
-		this._addUserCheckpoint({ threadId })
 
 		// interrupt any effects
 		const interrupt = await this.streamState[threadId]?.interrupt
@@ -639,9 +645,9 @@ class ChatThreadService extends Disposable implements IChatThreadService {
 				this._addMessageToThread(threadId, { role: 'tool', type: 'invalid_params', rawParams: opts.unvalidatedToolParams, result: null, name: toolName, content: errorMessage, id: toolId, mcpServerName })
 				return {}
 			}
-			// once validated, add checkpoint for edit
-			if (toolName === 'edit_file') { this._addToolEditCheckpoint({ threadId, uri: (toolParams as BuiltinToolCallParams['edit_file']).uri }) }
-			if (toolName === 'rewrite_file') { this._addToolEditCheckpoint({ threadId, uri: (toolParams as BuiltinToolCallParams['rewrite_file']).uri }) }
+			// once validated, record the snapshot for any mutating tool on the current checkpoint
+			if (toolName === 'edit_file') { this._attachToolSnapshotToLatestCheckpoint({ threadId, uri: (toolParams as BuiltinToolCallParams['edit_file']).uri }) }
+			if (toolName === 'rewrite_file') { this._attachToolSnapshotToLatestCheckpoint({ threadId, uri: (toolParams as BuiltinToolCallParams['rewrite_file']).uri }) }
 
 			// 2. if tool requires approval, break from the loop, awaiting approval
 
@@ -657,6 +663,10 @@ class ChatThreadService extends Disposable implements IChatThreadService {
 		}
 		else {
 			toolParams = opts.validatedParams
+
+			// preapproved path still needs to record the pre-edit snapshot
+			if (toolName === 'edit_file') { this._attachToolSnapshotToLatestCheckpoint({ threadId, uri: (toolParams as BuiltinToolCallParams['edit_file']).uri }) }
+			if (toolName === 'rewrite_file') { this._attachToolSnapshotToLatestCheckpoint({ threadId, uri: (toolParams as BuiltinToolCallParams['rewrite_file']).uri }) }
 		}
 
 
@@ -758,14 +768,13 @@ class ChatThreadService extends Disposable implements IChatThreadService {
 		let nMessagesSent = 0
 		let shouldSendAnotherMessage = true
 		let isRunningWhenEnd: IsRunningType = undefined
+		let pendingToolRequestId: string | undefined
 
 		// before enter loop, call tool
 		if (callThisToolFirst) {
 			const { interrupted } = await this._runToolCall(threadId, callThisToolFirst.name, callThisToolFirst.id, callThisToolFirst.mcpServerName, { preapproved: true, unvalidatedToolParams: callThisToolFirst.rawParams, validatedParams: callThisToolFirst.params })
 			if (interrupted) {
 				this._setStreamState(threadId, undefined)
-				this._addUserCheckpoint({ threadId })
-
 			}
 		}
 		this._setStreamState(threadId, { isRunning: 'idle', interrupt: 'not_needed' })  // just decorative, for clarity
@@ -776,6 +785,7 @@ class ChatThreadService extends Disposable implements IChatThreadService {
 			// false by default each iteration
 			shouldSendAnotherMessage = false
 			isRunningWhenEnd = undefined
+			pendingToolRequestId = undefined
 			nMessagesSent += 1
 
 			this._setStreamState(threadId, { isRunning: 'idle', interrupt: idleInterruptor })
@@ -877,7 +887,6 @@ class ChatThreadService extends Disposable implements IChatThreadService {
 						if (toolCallSoFar) this._addMessageToThread(threadId, { role: 'interrupted_streaming_tool', name: toolCallSoFar.name, mcpServerName: this._computeMCPServerOfToolName(toolCallSoFar.name) })
 
 						this._setStreamState(threadId, { isRunning: undefined, error })
-						this._addUserCheckpoint({ threadId })
 						return
 					}
 				}
@@ -939,7 +948,7 @@ class ChatThreadService extends Disposable implements IChatThreadService {
 							})
 							existingToolIds.add(tool.id)
 						}
-					// Add all placeholders in a single batch update (only if there are new ones to add)
+						// Add all placeholders in a single batch update (only if there are new ones to add)
 						if (placeholderTools.length > 0) {
 							this._addMessagesToThreadBatch(threadId, placeholderTools)
 						}
@@ -951,33 +960,39 @@ class ChatThreadService extends Disposable implements IChatThreadService {
 						}))
 
 						// Check if any tool was interrupted or awaiting approval
-						for (const result of results) {
+						for (let idx = 0; idx < results.length; idx++) {
+							const result = results[idx]
 							if (result.interrupted) {
 								this._setStreamState(threadId, undefined)
 								return
 							}
 							if (result.awaitingUserApproval) {
 								isRunningWhenEnd = 'awaiting_user'
+								if (!pendingToolRequestId) pendingToolRequestId = readSearchTools[idx]?.id
 							}
 						}
 					}
 
 					// Execute mutating/terminal tools sequentially (one at a time)
-					for (const tool of mutatingTools) {
-						const mcpTool = mcpTools?.find(t => t.name === tool.name)
-						const { awaitingUserApproval, interrupted } = await this._runToolCall(
-							threadId,
-							tool.name,
-							tool.id,
-							mcpTool?.mcpServerName,
-							{ preapproved: false, unvalidatedToolParams: tool.rawParams }
-						)
-						if (interrupted) {
-							this._setStreamState(threadId, undefined)
-							return
-						}
-						if (awaitingUserApproval) {
-							isRunningWhenEnd = 'awaiting_user'
+					if (isRunningWhenEnd !== 'awaiting_user') {
+						for (const tool of mutatingTools) {
+							const mcpTool = mcpTools?.find(t => t.name === tool.name)
+							const { awaitingUserApproval, interrupted } = await this._runToolCall(
+								threadId,
+								tool.name,
+								tool.id,
+								mcpTool?.mcpServerName,
+								{ preapproved: false, unvalidatedToolParams: tool.rawParams }
+							)
+							if (interrupted) {
+								this._setStreamState(threadId, undefined)
+								return
+							}
+							if (awaitingUserApproval) {
+								isRunningWhenEnd = 'awaiting_user'
+								pendingToolRequestId = tool.id
+								break
+							}
 						}
 					}
 
@@ -986,17 +1001,20 @@ class ChatThreadService extends Disposable implements IChatThreadService {
 						shouldSendAnotherMessage = true
 					}
 
-					this._setStreamState(threadId, { isRunning: 'idle', interrupt: 'not_needed' }) // just decorative, for clarity
+					if (isRunningWhenEnd !== 'awaiting_user') {
+						this._setStreamState(threadId, { isRunning: 'idle', interrupt: 'not_needed' }) // just decorative, for clarity
+					}
 				}
 
 			} // end while (attempts)
 		} // end while (send message)
 
 		// if awaiting user approval, keep isRunning true, else end isRunning
-		this._setStreamState(threadId, { isRunning: isRunningWhenEnd })
-
-		// add checkpoint before the next user message
-		if (!isRunningWhenEnd) this._addUserCheckpoint({ threadId })
+		if (isRunningWhenEnd === 'awaiting_user') {
+			this._setStreamState(threadId, { isRunning: 'awaiting_user', pendingToolRequestId })
+		} else {
+			this._setStreamState(threadId, { isRunning: isRunningWhenEnd })
+		}
 
 		// capture number of messages sent
 		this._metricsService.capture('Agent Loop Done', { nMessagesSent, chatMode })
@@ -1092,19 +1110,35 @@ class ChatThreadService extends Disposable implements IChatThreadService {
 			userModifications: { voidFileSnapshotOfURI: {}, },
 		})
 	}
-	// call this right after LLM edits a file
-	private _addToolEditCheckpoint({ threadId, uri, }: { threadId: string, uri: URI }) {
+	private _getLatestCheckpointIdx(threadId: string): number | null {
+		const thread = this.state.allThreads[threadId]
+		if (!thread) return null
+		const idx = findLastIdx(thread.messages, (m) => m.role === 'checkpoint')
+		return idx === undefined ? null : idx
+	}
+
+	private _attachToolSnapshotToLatestCheckpoint({ threadId, uri }: { threadId: string, uri: URI }) {
 		const thread = this.state.allThreads[threadId]
 		if (!thread) return
-		const { model } = this._voidModelService.getModel(uri)
-		if (!model) return // should never happen
-		const diffAreasSnapshot = this._editCodeService.getVoidFileSnapshot(uri)
-		this._addCheckpoint(threadId, {
-			role: 'checkpoint',
-			type: 'tool_edit',
-			voidFileSnapshotOfURI: { [uri.fsPath]: diffAreasSnapshot },
-			userModifications: { voidFileSnapshotOfURI: {} },
-		})
+
+		const lastCheckpointIdx = this._getLatestCheckpointIdx(threadId)
+		if (lastCheckpointIdx === null) return
+
+		const checkpoint = thread.messages[lastCheckpointIdx]
+		if (!checkpoint || checkpoint.role !== 'checkpoint') return
+
+		// if we already recorded a snapshot for this file on this checkpoint, keep the earliest one
+		if (checkpoint.voidFileSnapshotOfURI[uri.fsPath] !== undefined) return
+
+		const snapshot = this._editCodeService.getVoidFileSnapshot(uri)
+		const updatedCheckpoint: CheckpointEntry = {
+			...checkpoint,
+			voidFileSnapshotOfURI: {
+				...checkpoint.voidFileSnapshotOfURI,
+				[uri.fsPath]: snapshot,
+			},
+		}
+		this._editMessageInThread(threadId, lastCheckpointIdx, updatedCheckpoint)
 	}
 
 
@@ -1161,12 +1195,12 @@ class ChatThreadService extends Disposable implements IChatThreadService {
 	private _makeUsStandOnCheckpoint({ threadId }: { threadId: string }) {
 		const thread = this.state.allThreads[threadId]
 		if (!thread) return
-		if (thread.state.currCheckpointIdx === null) {
-			const lastMsg = thread.messages[thread.messages.length - 1]
-			if (lastMsg?.role !== 'checkpoint')
-				this._addUserCheckpoint({ threadId })
-			this._setThreadState(threadId, { currCheckpointIdx: thread.messages.length - 1 })
-		}
+		if (thread.state.currCheckpointIdx !== null) return
+
+		const lastCheckpointIdx = this._getLatestCheckpointIdx(threadId)
+		if (lastCheckpointIdx === null) return
+
+		this._setThreadState(threadId, { currCheckpointIdx: lastCheckpointIdx })
 	}
 
 	jumpToCheckpointBeforeMessageIdx({ threadId, messageIdx, jumpToUserModified }: { threadId: string, messageIdx: number, jumpToUserModified: boolean }) {
@@ -1332,10 +1366,8 @@ We only need to do it for files that were edited since `from`, ie files between 
 			await this.abortRunning(threadId)
 		}
 
-		// add dummy before this message to keep checkpoint before user message idea consistent
-		if (thread.messages.length === 0) {
-			this._addUserCheckpoint({ threadId })
-		}
+		// capture a checkpoint before every new user message
+		this._addUserCheckpoint({ threadId })
 
 
 		// add user's message to chat history

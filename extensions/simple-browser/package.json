@@ -39,18 +39,24 @@
       {
         "command": "simpleBrowser.show",
         "title": "Show",
-        "category": "Simple Browser"
+        "category": "Just Browser"
       }
     ],
     "configuration": [
       {
-        "title": "Simple Browser",
+        "title": "Just Browser",
         "properties": {
           "simpleBrowser.focusLockIndicator.enabled": {
             "type": "boolean",
             "default": true,
             "title": "Focus Lock Indicator Enabled",
             "description": "%configuration.focusLockIndicator.enabled.description%"
+          },
+          "simpleBrowser.useElectronWebview": {
+            "type": "boolean",
+            "default": false,
+            "title": "Use Electron Webview",
+            "description": "%configuration.useElectronWebview.description%"
           }
         }
       }

@@ -119,3 +119,23 @@ export class ShowGPUInfoAction extends Action2 {
 		nativeHostService.openGPUInfoWindow();
 	}
 }
+
+export class OpenUrlWithDevToolsAction extends Action2 {
+
+	constructor() {
+		super({
+			id: 'workbench.action.openUrlWithDevTools',
+			title: localize2('openUrlWithDevTools', 'Open URL with Developer Tools'),
+			category: Categories.Developer,
+			f1: false
+		});
+	}
+
+	run(accessor: ServicesAccessor, url: string) {
+		if (!url || typeof url !== 'string') {
+			return;
+		}
+		const nativeHostService = accessor.get(INativeHostService);
+		nativeHostService.openUrlWithDevTools(url);
+	}
+}

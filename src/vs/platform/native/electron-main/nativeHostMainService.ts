@@ -925,6 +925,44 @@ export class NativeHostMainService extends Disposable implements INativeHostMain
 		window?.win?.webContents.toggleDevTools();
 	}
 
+	async openUrlWithDevTools(windowId: number | undefined, url: string): Promise<void> {
+		const parentWindow = this.codeWindowById(windowId);
+
+		const options = this.instantiationService.invokeFunction(defaultBrowserWindowOptions, defaultWindowState(), { forceNativeTitlebar: true });
+		options.width = 1200;
+		options.height = 800;
+		options.backgroundColor = undefined;
+		options.webPreferences = {
+			...options.webPreferences,
+			sandbox: false,
+			webSecurity: true,
+			nodeIntegration: false,
+			contextIsolation: true
+		};
+
+		const devToolsWindow = new BrowserWindow(options);
+		devToolsWindow.setMenuBarVisibility(false);
+
+		// Load the URL
+		devToolsWindow.loadURL(url);
+
+		// Open DevTools when ready
+		devToolsWindow.webContents.once('did-finish-load', () => {
+			devToolsWindow.webContents.openDevTools({ mode: 'right' });
+		});
+
+		devToolsWindow.once('ready-to-show', () => devToolsWindow.show());
+
+		// Close when parent closes
+		if (parentWindow?.win) {
+			parentWindow.win.on('close', () => {
+				if (!devToolsWindow.isDestroyed()) {
+					devToolsWindow.close();
+				}
+			});
+		}
+	}
+
 	async openGPUInfoWindow(windowId: number | undefined): Promise<void> {
 		const parentWindow = this.codeWindowById(windowId);
 		if (!parentWindow) {
