@@ -141,6 +141,15 @@ export const AuxiliaryBarVisibleContext = new RawContextKey<boolean>('auxiliaryB
 //#endregion
 
 
+//#region < --- Chat History --- >
+
+export const ActiveChatHistoryContext = new RawContextKey<string>('activeChatHistory', '', localize('activeChatHistory', "The identifier of the active chat history view"));
+export const ChatHistoryFocusContext = new RawContextKey<boolean>('chatHistoryFocus', false, localize('chatHistoryFocus', "Whether the chat history has keyboard focus"));
+export const ChatHistoryVisibleContext = new RawContextKey<boolean>('chatHistoryVisible', false, localize('chatHistoryVisible', "Whether the chat history is visible"));
+
+//#endregion
+
+
 //#region < --- Panel --- >
 
 export const ActivePanelContext = new RawContextKey<string>('activePanel', '', localize('activePanel', "The identifier of the active panel"));

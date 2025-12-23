@@ -48,6 +48,8 @@ import './browser/parts/editor/editor.contribution.js';
 import './browser/parts/editor/editorParts.js';
 import './browser/parts/paneCompositePartService.js';
 import './browser/parts/banner/bannerPart.js';
+import './browser/parts/chathistory/chatHistoryPart.js';
+import './browser/parts/chathistory/chatHistoryActions.js';
 import './browser/parts/statusbar/statusbarPart.js';
 
 //#endregion

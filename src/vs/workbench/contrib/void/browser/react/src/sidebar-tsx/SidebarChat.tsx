@@ -1422,7 +1422,7 @@ prose-sm
 break-words
 max-w-none
 leading-relaxed
-text-[13px]
+text-[14px]
 
 [&>:first-child]:!mt-0
 [&>:last-child]:!mb-0
