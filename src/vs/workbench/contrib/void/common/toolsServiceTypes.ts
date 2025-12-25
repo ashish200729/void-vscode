@@ -18,7 +18,7 @@ export type ShallowDirectoryItem = {
 }
 
 
-export const approvalTypeOfBuiltinToolName: Partial<{ [T in BuiltinToolName]?: 'edits' | 'terminal' | 'browser-interaction' | 'MCP tools' }> = {
+export const approvalTypeOfBuiltinToolName: Partial<{ [T in BuiltinToolName]?: 'edits' | 'terminal' | 'MCP tools' }> = {
 	'create_file_or_folder': 'edits',
 	'delete_file_or_folder': 'edits',
 	'rewrite_file': 'edits',
@@ -27,10 +27,6 @@ export const approvalTypeOfBuiltinToolName: Partial<{ [T in BuiltinToolName]?: '
 	'run_persistent_command': 'terminal',
 	'open_persistent_terminal': 'terminal',
 	'kill_persistent_terminal': 'terminal',
-	// Browser interaction tools that modify state or execute code
-	'browser_evaluate': 'browser-interaction',
-	'browser_fill': 'browser-interaction',
-	'browser_type': 'browser-interaction',
 }
 
 
@@ -64,24 +60,6 @@ export type BuiltinToolCallParams = {
 	'open_persistent_terminal': { cwd: string | null },
 	'run_persistent_command': { command: string; persistentTerminalId: string },
 	'kill_persistent_terminal': { persistentTerminalId: string },
-	// --- Browser tools
-	'browser_open': { url: string | null },
-	'browser_navigate': { url: string },
-	'browser_screenshot': {},
-	'browser_get_content': {},
-	'browser_get_accessibility_tree': {},
-	'browser_click': { selector: string },
-	'browser_type': { selector: string, text: string, delay: number | null },
-	'browser_fill': { selector: string, value: string },
-	'browser_press': { key: string },
-	'browser_hover': { selector: string },
-	'browser_wait_for_selector': { selector: string, timeout: number | null },
-	'browser_evaluate': { script: string },
-	'browser_back': {},
-	'browser_forward': {},
-	'browser_reload': {},
-	'browser_get_current_url': {},
-	'browser_close': {},
 }
 
 // RESULT OF TOOL CALL
@@ -103,24 +81,6 @@ export type BuiltinToolResultType = {
 	'run_persistent_command': { result: string; resolveReason: TerminalResolveReason; },
 	'open_persistent_terminal': { persistentTerminalId: string },
 	'kill_persistent_terminal': {},
-	// --- Browser tools
-	'browser_open': {},
-	'browser_navigate': {},
-	'browser_screenshot': { screenshot: string }, // base64 PNG
-	'browser_get_content': { html: string },
-	'browser_get_accessibility_tree': { tree: string },
-	'browser_click': {},
-	'browser_type': {},
-	'browser_fill': {},
-	'browser_press': {},
-	'browser_hover': {},
-	'browser_wait_for_selector': {},
-	'browser_evaluate': { result: any },
-	'browser_back': {},
-	'browser_forward': {},
-	'browser_reload': {},
-	'browser_get_current_url': { url: string },
-	'browser_close': {},
 }
 
 

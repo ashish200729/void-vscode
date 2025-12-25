@@ -31,22 +31,16 @@ const homeButton = header.querySelector<HTMLButtonElement>('.home-button')!;
 const openExternalButton = header.querySelector<HTMLButtonElement>('.open-external-button')!;
 
 // URL bar elements
-const urlBar = header.querySelector<HTMLElement>('.url-bar')!;
 const securityIcon = header.querySelector<HTMLElement>('.security-icon')!;
 const clearButton = header.querySelector<HTMLButtonElement>('.clear-button')!;
-
-// Error overlay elements
-const errorOverlay = document.querySelector<HTMLElement>('.error-overlay')!;
-const errorMessage = document.querySelector<HTMLElement>('.error-message')!;
-const errorRetryButton = document.querySelector<HTMLButtonElement>('.error-retry-button')!;
 
 // Navigation constants
 const homeUrl = 'https://www.google.com/';
 const searchEngineUrl = 'https://www.google.com/search?q=';
 
-// Loading state management
-let loadingTimeout: number | null = null;
-const LOADING_TIMEOUT_MS = 30000; // 30 seconds timeout
+// Client-side history management
+let historyStack: string[] = [];
+let historyIndex = -1;
 
 // Check if input is a valid URL
 function isValidUrl(input: string): boolean {
@@ -112,108 +106,63 @@ function updateSecurityIcon(url: string): void {
 	}
 }
 
-// Format URL for display (clean version)
-function formatUrlForDisplay(url: string): string {
-	try {
-		const urlObj = new URL(url);
-		// Remove vscodeBrowserReqId parameter
-		urlObj.searchParams.delete('vscodeBrowserReqId');
-		return urlObj.toString();
-	} catch {
-		return url;
+// Update navigation button states
+function updateNavigationButtons(): void {
+	backButton.disabled = historyIndex <= 0;
+	forwardButton.disabled = historyIndex >= historyStack.length - 1;
+}
+
+// Navigate to a URL
+function navigateToUrl(url: string, addToHistory: boolean = true): void {
+	iframe.src = url;
+	input.value = url;
+	updateSecurityIcon(url);
+
+	if (addToHistory) {
+		// Remove any forward history when navigating to a new page
+		historyStack = historyStack.slice(0, historyIndex + 1);
+		historyStack.push(url);
+		historyIndex = historyStack.length - 1;
 	}
+
+	updateNavigationButtons();
+}
+
+// Go back in history
+function goBack(): void {
+	if (historyIndex > 0) {
+		historyIndex--;
+		const url = historyStack[historyIndex];
+		navigateToUrl(url, false);
+	}
+}
+
+// Go forward in history
+function goForward(): void {
+	if (historyIndex < historyStack.length - 1) {
+		historyIndex++;
+		const url = historyStack[historyIndex];
+		navigateToUrl(url, false);
+	}
+}
+
+// Reload current page
+function reload(): void {
+	iframe.src = iframe.src;
 }
 
 window.addEventListener('message', e => {
 	switch (e.data.type) {
 		case 'focus':
-			{
-				iframe.focus();
-				break;
-			}
+			iframe.focus();
+			break;
 		case 'didChangeFocusLockIndicatorEnabled':
-			{
-				toggleFocusLockIndicatorEnabled(e.data.enabled);
-				break;
-			}
-		case 'updateState':
-			{
-				// Lightweight state update without HTML regeneration
-				const { url, canGoBack, canGoForward } = e.data;
-
-				// Update URL bar
-				input.value = formatUrlForDisplay(url);
-				updateSecurityIcon(url);
-
-				// Update navigation buttons
-				backButton.disabled = !canGoBack;
-				forwardButton.disabled = !canGoForward;
-
-				// Update iframe if URL changed
-				const currentIframeSrc = iframe.src;
-				const normalizedNewUrl = normalizeUrl(url);
-				if (currentIframeSrc !== normalizedNewUrl && normalizedNewUrl) {
-					iframe.src = normalizedNewUrl;
-				}
-				break;
-			}
-		case 'showLoading':
-			{
-				document.body.classList.add('loading');
-				break;
-			}
-		case 'hideLoading':
-			{
-				if (typeof hideLoading === 'function') {
-					hideLoading();
-				} else {
-					document.body.classList.remove('loading');
-				}
-				break;
-			}
-		case 'showError':
-			{
-				if (typeof showError === 'function') {
-					showError(e.data.message);
-				}
-				break;
-			}
-		case 'scrollTo':
-			{
-				// Scroll the iframe's content window
-				try {
-					iframe.contentWindow?.scrollTo(e.data.x, e.data.y);
-				} catch (err) {
-					// Ignore cross-origin errors
-				}
-				break;
-			}
-		case 'scrollBy':
-			{
-				// Scroll the iframe's content window
-				try {
-					iframe.contentWindow?.scrollBy(e.data.deltaX, e.data.deltaY);
-				} catch (err) {
-					// Ignore cross-origin errors
-				}
-				break;
-			}
-		case 'scrollIntoView':
-			{
-				// Scroll element into view in the iframe
-				try {
-					const doc = iframe.contentWindow?.document;
-					if (doc) {
-						const element = doc.querySelector(e.data.selector);
-						if (element) {
-							element.scrollIntoView({ behavior: 'smooth', block: 'center' });
-						}
-					}
-				} catch (err) {
-					// Ignore cross-origin errors or selector errors
-				}
-				break;
-			}
+			toggleFocusLockIndicatorEnabled(e.data.enabled);
+			break;
+		case 'navigate':
+			// Navigate from extension (e.g., when show is called with new URL)
+			navigateToUrl(e.data.url);
+			break;
 	}
 });
 
@@ -223,74 +172,19 @@ onceDocumentLoaded(() => {
 		document.body.classList.toggle('iframe-focused', iframeFocused);
 	}, 50);
 
-	// Update button states based on backend history
-	function updateNavigationButtons(canGoBack: boolean, canGoForward: boolean) {
-		backButton.disabled = !canGoBack;
-		forwardButton.disabled = !canGoForward;
-	}
-
-	// Clear loading timeout
-	function clearLoadingTimeout() {
-		if (loadingTimeout !== null) {
-			clearTimeout(loadingTimeout);
-			loadingTimeout = null;
-		}
-	}
-
-	// Hide loading state
-	function hideLoading() {
-		clearLoadingTimeout();
-		document.body.classList.remove('loading');
-	}
-
-	// Show error state
-	function showError(message: string) {
-		hideLoading();
-		errorMessage.textContent = message;
-		errorOverlay.classList.add('visible');
-		iframe.style.visibility = 'hidden';
-	}
-
-	// Hide error state
-	function hideError() {
-		errorOverlay.classList.remove('visible');
-		iframe.style.visibility = 'visible';
-	}
-
-	iframe.addEventListener('load', () => {
-		// Hide loading indicator
-		hideLoading();
-		// Hide any error overlay
-		hideError();
-	});
-
-	iframe.addEventListener('error', () => {
-		// Show error on load failure
-		showError('The page failed to load. Please check your connection and try again.');
-	});
-
 	input.addEventListener('change', e => {
 		const inputValue = (e.target as HTMLInputElement).value;
 		const url = inputToUrl(inputValue);
-		// Send navigation request to backend
-		vscode.postMessage({
-			type: 'navigate',
-			url: url
-		});
+		navigateToUrl(url);
 	});
 
 	// Handle Enter key press
 	input.addEventListener('keydown', e => {
 		if (e.key === 'Enter') {
 			const url = inputToUrl(input.value);
-			// Send navigation request to backend
-			vscode.postMessage({
-				type: 'navigate',
-				url: url
-			});
+			navigateToUrl(url);
 			input.blur();
 		} else if (e.key === 'Escape') {
-			// Just blur and reset to current displayed URL
 			input.blur();
 		}
 	});
@@ -307,25 +201,15 @@ onceDocumentLoaded(() => {
 	});
 
 	forwardButton.addEventListener('click', () => {
-		// Send forward request to backend
-		vscode.postMessage({
-			type: 'forward'
-		});
+		goForward();
 	});
 
 	backButton.addEventListener('click', () => {
-		// Send back request to backend
-		vscode.postMessage({
-			type: 'back'
-		});
+		goBack();
 	});
 
 	homeButton.addEventListener('click', () => {
-		// Send navigate to home URL request to backend
-		vscode.postMessage({
-			type: 'navigate',
-			url: homeUrl
-		});
+		navigateToUrl(homeUrl);
 	});
 
 	openExternalButton.addEventListener('click', () => {
@@ -335,60 +219,17 @@ onceDocumentLoaded(() => {
 		});
 	});
 
-	errorRetryButton.addEventListener('click', () => {
-		hideError();
-		// Send reload request to backend
-		vscode.postMessage({
-			type: 'reload'
-		});
-	});
-
 	reloadButton.addEventListener('click', () => {
-		// Send reload request to backend
-		vscode.postMessage({
-			type: 'reload'
-		});
+		reload();
 	});
 
-	const initialUrl = normalizeUrl(settings.url) || homeUrl;
+	// Initial page load
+	const initialUrl = settings.url || homeUrl;
+	navigateToUrl(initialUrl);
 
-	// Initial page load - just set iframe src directly
-	// Backend will handle navigation from this point
-	if (initialUrl) {
-		iframe.src = initialUrl;
-		input.value = formatUrlForDisplay(initialUrl);
-		updateSecurityIcon(initialUrl);
-		document.body.classList.add('loading');
-
-		// Also notify backend about initial URL (if needed)
-		vscode.postMessage({
-			type: 'navigate',
-			url: initialUrl
-		});
-	}
-
-	toggleFocusLockIndicatorEnabled(settings.focusLockIndicatorEnabled);
+	toggleFocusLockIndicatorEnabled(settings.focusLockEnabled);
 });
 
 function toggleFocusLockIndicatorEnabled(enabled: boolean) {
 	document.body.classList.toggle('enable-focus-lock-indicator', enabled);
 }
-
-function normalizeUrl(rawUrl: string): string {
-	const trimmedUrl = rawUrl.trim();
-
-	if (!trimmedUrl) {
-		return trimmedUrl;
-	}
-
-	try {
-		return new URL(trimmedUrl).toString();
-	} catch {
-		try {
-			return new URL(`https://${trimmedUrl}`).toString();
-		} catch {
-			return trimmedUrl;
-		}
-	}
-}
-

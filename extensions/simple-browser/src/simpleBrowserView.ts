@@ -15,7 +15,7 @@ export interface ShowOptions {
 export class SimpleBrowserView extends Disposable {
 
 	public static readonly viewType = 'simpleBrowser.view';
-	private static readonly title = vscode.l10n.t("Orbit Browser");
+	private static readonly title = vscode.l10n.t("Simple Browser");
 
 	private static getWebviewLocalResourceRoots(extensionUri: vscode.Uri): readonly vscode.Uri[] {
 		return [
@@ -80,22 +80,6 @@ export class SimpleBrowserView extends Disposable {
 						// Noop
 					}
 					break;
-				case 'navigate':
-					// Forward navigation request to backend via command
-					vscode.commands.executeCommand('simpleBrowser.navigate', e.url);
-					break;
-				case 'back':
-					// Forward back request to backend via command
-					vscode.commands.executeCommand('simpleBrowser.back');
-					break;
-				case 'forward':
-					// Forward forward request to backend via command
-					vscode.commands.executeCommand('simpleBrowser.forward');
-					break;
-				case 'reload':
-					// Forward reload request to backend via command
-					vscode.commands.executeCommand('simpleBrowser.reload');
-					break;
 			}
 		}));
 
@@ -121,78 +105,19 @@ export class SimpleBrowserView extends Disposable {
 		super.dispose();
 	}
 
-	/**
-	 * Close the browser panel
-	 */
-	public close(): void {
-		// Dispose the webview panel which will close it
-		this._webviewPanel.dispose();
-	}
-
 	public show(url: string, options?: ShowOptions) {
 		// Only regenerate HTML on first call
 		if (!this._isInitialized) {
 			this._webviewPanel.webview.html = this.getHtml(url);
 			this._isInitialized = true;
 		} else {
-			// Use message protocol for subsequent updates
-			this.updateState(url, false, false); // TODO: get actual history state from automation
+			// Navigate the iframe to new URL
+			this._webviewPanel.webview.postMessage({
+				type: 'navigate',
+				url
+			});
 		}
 		this._webviewPanel.reveal(options?.viewColumn, options?.preserveFocus);
-	}
-
-	/**
-	 * Update webview state using message protocol (lightweight, preserves iframe state)
-	 */
-	public updateState(url: string, canGoBack: boolean, canGoForward: boolean): void {
-		this._webviewPanel.webview.postMessage({
-			type: 'updateState',
-			url,
-			canGoBack,
-			canGoForward
-		});
-	}
-
-	/**
-	 * Show loading indicator in webview
-	 */
-	public showLoading(): void {
-		this._webviewPanel.webview.postMessage({ type: 'showLoading' });
-	}
-
-	/**
-	 * Hide loading indicator in webview
-	 */
-	public hideLoading(): void {
-		this._webviewPanel.webview.postMessage({ type: 'hideLoading' });
-	}
-
-	/**
-	 * Show error overlay in webview
-	 */
-	public showError(message: string): void {
-		this._webviewPanel.webview.postMessage({ type: 'showError', message });
-	}
-
-	/**
-	 * Scroll to specific coordinates in webview
-	 */
-	public scrollTo(x: number, y: number): void {
-		this._webviewPanel.webview.postMessage({ type: 'scrollTo', x, y });
-	}
-
-	/**
-	 * Scroll by delta in webview
-	 */
-	public scrollBy(deltaX: number, deltaY: number): void {
-		this._webviewPanel.webview.postMessage({ type: 'scrollBy', deltaX, deltaY });
-	}
-
-	/**
-	 * Scroll element into view in webview
-	 */
-	public scrollIntoView(selector: string): void {
-		this._webviewPanel.webview.postMessage({ type: 'scrollIntoView', selector });
 	}
 
 	private getHtml(url: string) {
@@ -214,7 +139,7 @@ export class SimpleBrowserView extends Disposable {
 					font-src data: ${this._webviewPanel.webview.cspSource};
 					style-src ${this._webviewPanel.webview.cspSource} 'unsafe-inline';
 					script-src 'nonce-${nonce}';
-					frame-src * https: http:;
+					frame-src *;
 					img-src ${this._webviewPanel.webview.cspSource} data:;
 					">
 
@@ -263,18 +188,8 @@ export class SimpleBrowserView extends Disposable {
 					</nav>
 				</header>
 				<div class="content">
-					<div class="loading-indicator">
-						<div class="loading-spinner"></div>
-						<div class="loading-text">${vscode.l10n.t("Loading...")}</div>
-					</div>
-					<div class="error-overlay">
-						<div class="error-icon"><i class="codicon codicon-error"></i></div>
-						<div class="error-title">${vscode.l10n.t("This page could not be loaded")}</div>
-						<div class="error-message"></div>
-						<button class="error-retry-button">${vscode.l10n.t("Retry")}</button>
-					</div>
 					<div class="iframe-focused-alert">${vscode.l10n.t("Focus Lock")}</div>
-					<iframe sandbox="allow-scripts allow-forms allow-same-origin allow-downloads allow-popups allow-popups-to-escape-sandbox allow-modals allow-orientation-lock allow-pointer-lock allow-presentation allow-top-navigation allow-top-navigation-by-user-activation"></iframe>
+					<iframe sandbox="allow-scripts allow-forms allow-same-origin allow-downloads allow-popups allow-popups-to-escape-sandbox allow-modals allow-orientation-lock allow-pointer-lock allow-presentation allow-top-navigation allow-top-navigation-by-user-activation allow-storage-access-by-user-activation"></iframe>
 				</div>
 
 				<script src="${mainJs}" nonce="${nonce}"></script>
