@@ -174,6 +174,7 @@ export type ThreadStreamState = {
 			displayContentSoFar: string;
 			reasoningSoFar: string;
 			toolCallSoFar: RawToolCallObj | null;
+			toolCallsSoFar: RawToolCallObj[] | null;
 		};
 		toolInfo?: undefined;
 		interrupt: Promise<() => void>; // calling this should have no effect on state - would be too confusing. it just cancels the tool
@@ -571,9 +572,18 @@ class ChatThreadService extends Disposable implements IChatThreadService {
 
 		// add assistant message
 		if (this.streamState[threadId]?.isRunning === 'LLM') {
-			const { displayContentSoFar, reasoningSoFar, toolCallSoFar } = this.streamState[threadId].llmInfo
+			const { displayContentSoFar, reasoningSoFar, toolCallSoFar, toolCallsSoFar } = this.streamState[threadId].llmInfo
 			this._addMessageToThread(threadId, { role: 'assistant', displayContent: displayContentSoFar, reasoning: reasoningSoFar, anthropicReasoning: null })
-			if (toolCallSoFar) this._addMessageToThread(threadId, { role: 'interrupted_streaming_tool', name: toolCallSoFar.name, mcpServerName: this._computeMCPServerOfToolName(toolCallSoFar.name) })
+
+			// Handle multiple interrupted tools
+			if (toolCallsSoFar && toolCallsSoFar.length > 0) {
+				for (const tc of toolCallsSoFar) {
+					this._addMessageToThread(threadId, { role: 'interrupted_streaming_tool', name: tc.name, mcpServerName: this._computeMCPServerOfToolName(tc.name) })
+				}
+			}
+			else if (toolCallSoFar) {
+				this._addMessageToThread(threadId, { role: 'interrupted_streaming_tool', name: toolCallSoFar.name, mcpServerName: this._computeMCPServerOfToolName(toolCallSoFar.name) })
+			}
 		}
 		// add tool that's running
 		else if (this.streamState[threadId]?.isRunning === 'tool') {
@@ -826,7 +836,7 @@ class ChatThreadService extends Disposable implements IChatThreadService {
 					logging: { loggingName: `Chat - ${chatMode}`, loggingExtras: { threadId, nMessagesSent, chatMode } },
 					separateSystemMessage: separateSystemMessage,
 					onText: ({ fullText, fullReasoning, toolCall, toolCalls }) => {
-						this._setStreamState(threadId, { isRunning: 'LLM', llmInfo: { displayContentSoFar: fullText, reasoningSoFar: fullReasoning, toolCallSoFar: toolCall ?? null }, interrupt: Promise.resolve(() => { if (llmCancelToken) this._llmMessageService.abort(llmCancelToken) }) })
+						this._setStreamState(threadId, { isRunning: 'LLM', llmInfo: { displayContentSoFar: fullText, reasoningSoFar: fullReasoning, toolCallSoFar: toolCall ?? null, toolCallsSoFar: toolCalls ?? null }, interrupt: Promise.resolve(() => { if (llmCancelToken) this._llmMessageService.abort(llmCancelToken) }) })
 
 						// NOTE: Removed the streaming placeholder tool logic that was here previously.
 						// It was adding "Reading file" placeholders during streaming that would stick around.
@@ -851,7 +861,7 @@ class ChatThreadService extends Disposable implements IChatThreadService {
 					break
 				}
 
-				this._setStreamState(threadId, { isRunning: 'LLM', llmInfo: { displayContentSoFar: '', reasoningSoFar: '', toolCallSoFar: null }, interrupt: Promise.resolve(() => this._llmMessageService.abort(llmCancelToken)) })
+				this._setStreamState(threadId, { isRunning: 'LLM', llmInfo: { displayContentSoFar: '', reasoningSoFar: '', toolCallSoFar: null, toolCallsSoFar: null }, interrupt: Promise.resolve(() => this._llmMessageService.abort(llmCancelToken)) })
 				const llmRes = await messageIsDonePromise // wait for message to complete
 
 				// if something else started running in the meantime
@@ -882,9 +892,17 @@ class ChatThreadService extends Disposable implements IChatThreadService {
 					// error, but too many attempts
 					else {
 						const { error } = llmRes
-						const { displayContentSoFar, reasoningSoFar, toolCallSoFar } = this.streamState[threadId].llmInfo
+						const { displayContentSoFar, reasoningSoFar, toolCallSoFar, toolCallsSoFar } = this.streamState[threadId].llmInfo
 						this._addMessageToThread(threadId, { role: 'assistant', displayContent: displayContentSoFar, reasoning: reasoningSoFar, anthropicReasoning: null })
-						if (toolCallSoFar) this._addMessageToThread(threadId, { role: 'interrupted_streaming_tool', name: toolCallSoFar.name, mcpServerName: this._computeMCPServerOfToolName(toolCallSoFar.name) })
+
+						if (toolCallsSoFar && toolCallsSoFar.length > 0) {
+							for (const tc of toolCallsSoFar) {
+								this._addMessageToThread(threadId, { role: 'interrupted_streaming_tool', name: tc.name, mcpServerName: this._computeMCPServerOfToolName(tc.name) })
+							}
+						}
+						else if (toolCallSoFar) {
+							this._addMessageToThread(threadId, { role: 'interrupted_streaming_tool', name: toolCallSoFar.name, mcpServerName: this._computeMCPServerOfToolName(toolCallSoFar.name) })
+						}
 
 						this._setStreamState(threadId, { isRunning: undefined, error })
 						return
@@ -1774,15 +1792,36 @@ We only need to do it for files that were edited since `from`, ie files between 
 
 
 	deleteThread(threadId: string): void {
-		const { allThreads: currentThreads } = this.state
+		const { allThreads: currentThreads, currentThreadId } = this.state
 
 		// delete the thread
 		const newThreads = { ...currentThreads };
 		delete newThreads[threadId];
 
+		let newCurrentThreadId = currentThreadId;
+		if (threadId === currentThreadId) {
+			// switch to another thread
+			const remainingThreadIds = Object.keys(newThreads);
+			if (remainingThreadIds.length > 0) {
+				// switch to the most recently modified thread
+				const sortedThreads = remainingThreadIds.sort((a, b) => {
+					const tA = newThreads[a];
+					const tB = newThreads[b];
+					if (!tA || !tB) return 0;
+					return new Date(tB.lastModified).getTime() - new Date(tA.lastModified).getTime();
+				});
+				newCurrentThreadId = sortedThreads[0];
+			} else {
+				// no threads left, create a new one
+				const newThread = newThreadObject();
+				newThreads[newThread.id] = newThread;
+				newCurrentThreadId = newThread.id;
+			}
+		}
+
 		// store the updated threads
 		this._storeAllThreads(newThreads);
-		this._setState({ ...this.state, allThreads: newThreads })
+		this._setState({ ...this.state, allThreads: newThreads, currentThreadId: newCurrentThreadId })
 	}
 
 	duplicateThread(threadId: string) {

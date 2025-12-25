@@ -19,6 +19,17 @@ export class SimpleBrowserManager {
 		this._activeView = undefined;
 	}
 
+	public getActiveView(): SimpleBrowserView | undefined {
+		return this._activeView;
+	}
+
+	public closeActiveView(): void {
+		if (this._activeView) {
+			this._activeView.dispose();
+			this._activeView = undefined;
+		}
+	}
+
 	public show(inputUri: string | vscode.Uri, options?: ShowOptions): void {
 		const url = typeof inputUri === 'string' ? inputUri : inputUri.toString(true);
 		if (this._activeView) {

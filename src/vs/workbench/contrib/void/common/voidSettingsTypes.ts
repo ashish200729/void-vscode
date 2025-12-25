@@ -452,6 +452,8 @@ export type GlobalSettings = {
 	isOnboardingComplete: boolean;
 	disableSystemMessage: boolean;
 	autoAcceptLLMChanges: boolean;
+	enableBrowserTools: boolean;
+	browserDefaultTimeout: number; // milliseconds
 }
 
 export const defaultGlobalSettings: GlobalSettings = {
@@ -468,6 +470,8 @@ export const defaultGlobalSettings: GlobalSettings = {
 	isOnboardingComplete: false,
 	disableSystemMessage: false,
 	autoAcceptLLMChanges: false,
+	enableBrowserTools: true,
+	browserDefaultTimeout: 30000, // 30 seconds
 }
 
 export type GlobalSettingName = keyof GlobalSettings

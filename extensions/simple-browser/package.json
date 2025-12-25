@@ -40,6 +40,126 @@
         "command": "simpleBrowser.show",
         "title": "Show",
         "category": "Just Browser"
+      },
+      {
+        "command": "simpleBrowser.showAgenticBrowser",
+        "title": "Open Agentic Browser",
+        "category": "Browser Tools"
+      },
+      {
+        "command": "simpleBrowser.navigate",
+        "title": "Navigate to URL",
+        "category": "Browser Tools"
+      },
+      {
+        "command": "simpleBrowser.back",
+        "title": "Go Back",
+        "category": "Browser Tools"
+      },
+      {
+        "command": "simpleBrowser.forward",
+        "title": "Go Forward",
+        "category": "Browser Tools"
+      },
+      {
+        "command": "simpleBrowser.reload",
+        "title": "Reload Page",
+        "category": "Browser Tools"
+      },
+      {
+        "command": "simpleBrowser.click",
+        "title": "Click Element",
+        "category": "Browser Tools"
+      },
+      {
+        "command": "simpleBrowser.type",
+        "title": "Type Text",
+        "category": "Browser Tools"
+      },
+      {
+        "command": "simpleBrowser.fill",
+        "title": "Fill Form Field",
+        "category": "Browser Tools"
+      },
+      {
+        "command": "simpleBrowser.press",
+        "title": "Press Key",
+        "category": "Browser Tools"
+      },
+      {
+        "command": "simpleBrowser.hover",
+        "title": "Hover Element",
+        "category": "Browser Tools"
+      },
+      {
+        "command": "simpleBrowser.screenshot",
+        "title": "Take Screenshot",
+        "category": "Browser Tools"
+      },
+      {
+        "command": "simpleBrowser.getContent",
+        "title": "Get Page Content",
+        "category": "Browser Tools"
+      },
+      {
+        "command": "simpleBrowser.getAccessibilityTree",
+        "title": "Get Accessibility Tree",
+        "category": "Browser Tools"
+      },
+      {
+        "command": "simpleBrowser.evaluate",
+        "title": "Execute JavaScript",
+        "category": "Browser Tools"
+      },
+      {
+        "command": "simpleBrowser.waitForSelector",
+        "title": "Wait for Element",
+        "category": "Browser Tools"
+      },
+      {
+        "command": "simpleBrowser.closeBrowser",
+        "title": "Close Browser",
+        "category": "Browser Tools"
+      },
+      {
+        "command": "simpleBrowser.hideAgenticBrowser",
+        "title": "Hide Agentic Browser",
+        "category": "Browser Tools"
+      },
+      {
+        "command": "simpleBrowser.dragAndDrop",
+        "title": "Drag and Drop Element",
+        "category": "Browser Tools"
+      },
+      {
+        "command": "simpleBrowser.getCookies",
+        "title": "Get Cookies",
+        "category": "Browser Tools"
+      },
+      {
+        "command": "simpleBrowser.setCookies",
+        "title": "Set Cookies",
+        "category": "Browser Tools"
+      },
+      {
+        "command": "simpleBrowser.clearCookies",
+        "title": "Clear All Cookies",
+        "category": "Browser Tools"
+      },
+      {
+        "command": "simpleBrowser.scrollTo",
+        "title": "Scroll to Position",
+        "category": "Browser Tools"
+      },
+      {
+        "command": "simpleBrowser.scrollBy",
+        "title": "Scroll by Offset",
+        "category": "Browser Tools"
+      },
+      {
+        "command": "simpleBrowser.scrollIntoView",
+        "title": "Scroll Element into View",
+        "category": "Browser Tools"
       }
     ],
     "configuration": [

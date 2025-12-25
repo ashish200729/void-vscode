@@ -4,7 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { localize, localize2 } from '../../../../nls.js';
-import { Action2, MenuId, registerAction2 } from '../../../../platform/actions/common/actions.js';
+import { Action2, registerAction2 } from '../../../../platform/actions/common/actions.js';
 import { ContextKeyExpr } from '../../../../platform/contextkey/common/contextkey.js';
 import { Categories } from '../../../../platform/action/common/actionCommonCategories.js';
 import { ChatHistoryVisibleContext, AgentEditorModeContext } from '../../../common/contextkeys.js';
@@ -32,14 +32,6 @@ export class ToggleChatHistoryAction extends Action2 {
 			precondition: AgentEditorModeContext.isEqualTo('agents'),
 			icon: chatHistoryIcon,
 			toggled: ChatHistoryVisibleContext,
-			menu: [
-				{
-					id: MenuId.TitleBar,
-					when: AgentEditorModeContext.isEqualTo('agents'),
-					group: 'navigation',
-					order: 0
-				}
-			],
 			keybinding: {
 				weight: KeybindingWeight.WorkbenchContrib,
 				primary: KeyMod.CtrlCmd | KeyMod.Shift | KeyCode.KeyH,

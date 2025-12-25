@@ -1762,6 +1762,25 @@ const titleOfBuiltinToolName = {
 
 	'read_lint_errors': { done: `Read lint errors`, proposed: 'Read lint errors', running: loadingTitleWrapper('Reading lint errors') },
 	'search_in_file': { done: 'Searched in file', proposed: 'Search in file', running: loadingTitleWrapper('Searching in file') },
+
+	// Browser tools
+	'browser_open': { done: 'Opened browser', proposed: 'Open browser', running: loadingTitleWrapper('Opening browser') },
+	'browser_navigate': { done: 'Navigated', proposed: 'Navigate', running: loadingTitleWrapper('Navigating') },
+	'browser_screenshot': { done: 'Took screenshot', proposed: 'Take screenshot', running: loadingTitleWrapper('Taking screenshot') },
+	'browser_get_content': { done: 'Got page content', proposed: 'Get page content', running: loadingTitleWrapper('Getting page content') },
+	'browser_get_accessibility_tree': { done: 'Got accessibility tree', proposed: 'Get accessibility tree', running: loadingTitleWrapper('Getting accessibility tree') },
+	'browser_click': { done: 'Clicked', proposed: 'Click', running: loadingTitleWrapper('Clicking') },
+	'browser_type': { done: 'Typed text', proposed: 'Type text', running: loadingTitleWrapper('Typing text') },
+	'browser_fill': { done: 'Filled field', proposed: 'Fill field', running: loadingTitleWrapper('Filling field') },
+	'browser_press': { done: 'Pressed key', proposed: 'Press key', running: loadingTitleWrapper('Pressing key') },
+	'browser_hover': { done: 'Hovered', proposed: 'Hover', running: loadingTitleWrapper('Hovering') },
+	'browser_wait_for_selector': { done: 'Waited for element', proposed: 'Wait for element', running: loadingTitleWrapper('Waiting for element') },
+	'browser_evaluate': { done: 'Evaluated script', proposed: 'Evaluate script', running: loadingTitleWrapper('Evaluating script') },
+	'browser_back': { done: 'Went back', proposed: 'Go back', running: loadingTitleWrapper('Going back') },
+	'browser_forward': { done: 'Went forward', proposed: 'Go forward', running: loadingTitleWrapper('Going forward') },
+	'browser_reload': { done: 'Reloaded page', proposed: 'Reload page', running: loadingTitleWrapper('Reloading page') },
+	'browser_get_current_url': { done: 'Got current URL', proposed: 'Get current URL', running: loadingTitleWrapper('Getting current URL') },
+	'browser_close': { done: 'Closed browser', proposed: 'Close browser', running: loadingTitleWrapper('Closing browser') },
 } as const satisfies Record<BuiltinToolName, { done: any, proposed: any, running: any }>
 
 type ToolStatusIconMeta = {
@@ -2002,6 +2021,69 @@ const toolNameToDesc = (toolName: BuiltinToolName, _toolParams: BuiltinToolCallP
 						}
 					}
 					return { desc1: '' }
+				},
+				// Browser tools
+				'browser_open': () => {
+					const url = rawParams.url as string | undefined
+					return { desc1: url || 'https://www.google.com' }
+				},
+				'browser_navigate': () => {
+					const url = rawParams.url as string | undefined
+					return { desc1: url || '' }
+				},
+				'browser_screenshot': () => {
+					return { desc1: '' }
+				},
+				'browser_get_content': () => {
+					return { desc1: '' }
+				},
+				'browser_get_accessibility_tree': () => {
+					return { desc1: '' }
+				},
+				'browser_click': () => {
+					const selector = rawParams.selector as string | undefined
+					return { desc1: selector ? `"${selector}"` : '' }
+				},
+				'browser_type': () => {
+					const selector = rawParams.selector as string | undefined
+					const text = rawParams.text as string | undefined
+					return { desc1: selector ? `"${selector}"` : '', desc1Info: text ? `text: "${text}"` : undefined }
+				},
+				'browser_fill': () => {
+					const selector = rawParams.selector as string | undefined
+					const value = rawParams.value as string | undefined
+					return { desc1: selector ? `"${selector}"` : '', desc1Info: value ? `value: "${value}"` : undefined }
+				},
+				'browser_press': () => {
+					const key = rawParams.key as string | undefined
+					return { desc1: key ? `"${key}"` : '' }
+				},
+				'browser_hover': () => {
+					const selector = rawParams.selector as string | undefined
+					return { desc1: selector ? `"${selector}"` : '' }
+				},
+				'browser_wait_for_selector': () => {
+					const selector = rawParams.selector as string | undefined
+					return { desc1: selector ? `"${selector}"` : '' }
+				},
+				'browser_evaluate': () => {
+					const script = rawParams.script as string | undefined
+					return { desc1: script ? `"${script.substring(0, 50)}${script.length > 50 ? '...' : ''}"` : '' }
+				},
+				'browser_back': () => {
+					return { desc1: '' }
+				},
+				'browser_forward': () => {
+					return { desc1: '' }
+				},
+				'browser_reload': () => {
+					return { desc1: '' }
+				},
+				'browser_get_current_url': () => {
+					return { desc1: '' }
+				},
+				'browser_close': () => {
+					return { desc1: '' }
 				}
 			}
 			try {
@@ -2108,6 +2190,68 @@ const toolNameToDesc = (toolName: BuiltinToolName, _toolParams: BuiltinToolCallP
 				desc1: getBasename(toolParams.uri.fsPath),
 				desc1Info: getRelative(toolParams.uri, accessor),
 			}
+		},
+		// Browser tools
+		'browser_open': () => {
+			const toolParams = _toolParams as BuiltinToolCallParams['browser_open']
+			return { desc1: toolParams.url || 'https://www.google.com' }
+		},
+		'browser_navigate': () => {
+			const toolParams = _toolParams as BuiltinToolCallParams['browser_navigate']
+			return { desc1: toolParams.url }
+		},
+		'browser_screenshot': () => {
+			return { desc1: '' }
+		},
+		'browser_get_content': () => {
+			return { desc1: '' }
+		},
+		'browser_get_accessibility_tree': () => {
+			return { desc1: '' }
+		},
+		'browser_click': () => {
+			const toolParams = _toolParams as BuiltinToolCallParams['browser_click']
+			return { desc1: `"${toolParams.selector}"` }
+		},
+		'browser_type': () => {
+			const toolParams = _toolParams as BuiltinToolCallParams['browser_type']
+			return { desc1: `"${toolParams.selector}"`, desc1Info: `text: "${toolParams.text}"` }
+		},
+		'browser_fill': () => {
+			const toolParams = _toolParams as BuiltinToolCallParams['browser_fill']
+			return { desc1: `"${toolParams.selector}"`, desc1Info: `value: "${toolParams.value}"` }
+		},
+		'browser_press': () => {
+			const toolParams = _toolParams as BuiltinToolCallParams['browser_press']
+			return { desc1: `"${toolParams.key}"` }
+		},
+		'browser_hover': () => {
+			const toolParams = _toolParams as BuiltinToolCallParams['browser_hover']
+			return { desc1: `"${toolParams.selector}"` }
+		},
+		'browser_wait_for_selector': () => {
+			const toolParams = _toolParams as BuiltinToolCallParams['browser_wait_for_selector']
+			return { desc1: `"${toolParams.selector}"` }
+		},
+		'browser_evaluate': () => {
+			const toolParams = _toolParams as BuiltinToolCallParams['browser_evaluate']
+			const script = toolParams.script
+			return { desc1: `"${script.substring(0, 50)}${script.length > 50 ? '...' : ''}"` }
+		},
+		'browser_back': () => {
+			return { desc1: '' }
+		},
+		'browser_forward': () => {
+			return { desc1: '' }
+		},
+		'browser_reload': () => {
+			return { desc1: '' }
+		},
+		'browser_get_current_url': () => {
+			return { desc1: '' }
+		},
+		'browser_close': () => {
+			return { desc1: '' }
 		}
 	}
 
@@ -3235,7 +3379,586 @@ const builtinToolNameToComponent: { [T in BuiltinToolName]: { resultWrapper: Res
 			return <ToolHeaderWrapper {...componentParams} />
 		},
 	},
-};
+
+	// ========================================
+	// BROWSER TOOLS
+	// ========================================
+
+	'browser_open': {
+		resultWrapper: ({ toolMessage }) => {
+			const accessor = useAccessor()
+			const title = getTitle(toolMessage)
+			const { desc1, desc1Info } = toolNameToDesc(toolMessage.name, toolMessage.params, accessor, toolMessage.rawParams)
+			const statusIconMeta = getToolStatusIconMeta(toolMessage)
+
+			if (toolMessage.type === 'tool_request') return null
+
+			const isError = false
+			const isRejected = toolMessage.type === 'rejected'
+			const componentParams: ToolHeaderParams = {
+				title,
+				desc1,
+				desc1Info,
+				isError,
+				isRejected,
+				icon: statusIconMeta?.icon,
+				iconTooltip: statusIconMeta?.tooltip,
+			}
+
+			if (toolMessage.type === 'tool_error') {
+				const { result } = toolMessage
+				componentParams.bottomChildren = <BottomChildren title='Error'>
+					<CodeChildren>{result}</CodeChildren>
+				</BottomChildren>
+			}
+
+			return <ToolHeaderWrapper {...componentParams} />
+		},
+	},
+
+	'browser_navigate': {
+		resultWrapper: ({ toolMessage }) => {
+			const accessor = useAccessor()
+			const title = getTitle(toolMessage)
+			const { desc1, desc1Info } = toolNameToDesc(toolMessage.name, toolMessage.params, accessor, toolMessage.rawParams)
+			const statusIconMeta = getToolStatusIconMeta(toolMessage)
+
+			if (toolMessage.type === 'tool_request') return null
+
+			const isError = false
+			const isRejected = toolMessage.type === 'rejected'
+			const componentParams: ToolHeaderParams = {
+				title,
+				desc1,
+				desc1Info,
+				isError,
+				isRejected,
+				icon: statusIconMeta?.icon,
+				iconTooltip: statusIconMeta?.tooltip,
+			}
+
+			if (toolMessage.type === 'tool_error') {
+				const { result } = toolMessage
+				componentParams.bottomChildren = <BottomChildren title='Error'>
+					<CodeChildren>{result}</CodeChildren>
+				</BottomChildren>
+			}
+
+			return <ToolHeaderWrapper {...componentParams} />
+		},
+	},
+
+	'browser_screenshot': {
+		resultWrapper: ({ toolMessage }) => {
+			const accessor = useAccessor()
+			const title = getTitle(toolMessage)
+			const { desc1, desc1Info } = toolNameToDesc(toolMessage.name, toolMessage.params, accessor, toolMessage.rawParams)
+			const statusIconMeta = getToolStatusIconMeta(toolMessage)
+
+			if (toolMessage.type === 'tool_request') return null
+
+			const isError = false
+			const isRejected = toolMessage.type === 'rejected'
+			const componentParams: ToolHeaderParams = {
+				title,
+				desc1,
+				desc1Info,
+				isError,
+				isRejected,
+				icon: statusIconMeta?.icon,
+				iconTooltip: statusIconMeta?.tooltip,
+			}
+
+			if (toolMessage.type === 'success') {
+				const { result } = toolMessage
+				componentParams.children = <CodeChildren className='max-h-[300px] overflow-auto'>
+					<img src={`data:image/png;base64,${result.screenshot}`} alt="Browser screenshot" style={{ maxWidth: '100%' }} />
+				</CodeChildren>
+			}
+			else if (toolMessage.type === 'tool_error') {
+				const { result } = toolMessage
+				componentParams.bottomChildren = <BottomChildren title='Error'>
+					<CodeChildren>{result}</CodeChildren>
+				</BottomChildren>
+			}
+
+			return <ToolHeaderWrapper {...componentParams} />
+		},
+	},
+
+	'browser_get_content': {
+		resultWrapper: ({ toolMessage }) => {
+			const accessor = useAccessor()
+			const title = getTitle(toolMessage)
+			const { desc1, desc1Info } = toolNameToDesc(toolMessage.name, toolMessage.params, accessor, toolMessage.rawParams)
+			const statusIconMeta = getToolStatusIconMeta(toolMessage)
+
+			if (toolMessage.type === 'tool_request') return null
+
+			const isError = false
+			const isRejected = toolMessage.type === 'rejected'
+			const componentParams: ToolHeaderParams = {
+				title,
+				desc1,
+				desc1Info,
+				isError,
+				isRejected,
+				icon: statusIconMeta?.icon,
+				iconTooltip: statusIconMeta?.tooltip,
+			}
+
+			if (toolMessage.type === 'success') {
+				const { result } = toolMessage
+				const truncated = result.html.length > 5000 ? result.html.substring(0, 5000) + '\n... [truncated]' : result.html
+				componentParams.children = <CodeChildren className='max-h-[300px] overflow-auto'>
+					<pre className='font-mono whitespace-pre-wrap text-xs'>{truncated}</pre>
+				</CodeChildren>
+			}
+			else if (toolMessage.type === 'tool_error') {
+				const { result } = toolMessage
+				componentParams.bottomChildren = <BottomChildren title='Error'>
+					<CodeChildren>{result}</CodeChildren>
+				</BottomChildren>
+			}
+
+			return <ToolHeaderWrapper {...componentParams} />
+		},
+	},
+
+	'browser_get_accessibility_tree': {
+		resultWrapper: ({ toolMessage }) => {
+			const accessor = useAccessor()
+			const title = getTitle(toolMessage)
+			const { desc1, desc1Info } = toolNameToDesc(toolMessage.name, toolMessage.params, accessor, toolMessage.rawParams)
+			const statusIconMeta = getToolStatusIconMeta(toolMessage)
+
+			if (toolMessage.type === 'tool_request') return null
+
+			const isError = false
+			const isRejected = toolMessage.type === 'rejected'
+			const componentParams: ToolHeaderParams = {
+				title,
+				desc1,
+				desc1Info,
+				isError,
+				isRejected,
+				icon: statusIconMeta?.icon,
+				iconTooltip: statusIconMeta?.tooltip,
+			}
+
+			if (toolMessage.type === 'success') {
+				const { result } = toolMessage
+				componentParams.children = <CodeChildren className='max-h-[300px] overflow-auto'>
+					<pre className='font-mono whitespace-pre text-xs'>{result.tree}</pre>
+				</CodeChildren>
+			}
+			else if (toolMessage.type === 'tool_error') {
+				const { result } = toolMessage
+				componentParams.bottomChildren = <BottomChildren title='Error'>
+					<CodeChildren>{result}</CodeChildren>
+				</BottomChildren>
+			}
+
+			return <ToolHeaderWrapper {...componentParams} />
+		},
+	},
+
+	'browser_click': {
+		resultWrapper: ({ toolMessage }) => {
+			const accessor = useAccessor()
+			const title = getTitle(toolMessage)
+			const { desc1, desc1Info } = toolNameToDesc(toolMessage.name, toolMessage.params, accessor, toolMessage.rawParams)
+			const statusIconMeta = getToolStatusIconMeta(toolMessage)
+
+			if (toolMessage.type === 'tool_request') return null
+
+			const isError = false
+			const isRejected = toolMessage.type === 'rejected'
+			const componentParams: ToolHeaderParams = {
+				title,
+				desc1,
+				desc1Info,
+				isError,
+				isRejected,
+				icon: statusIconMeta?.icon,
+				iconTooltip: statusIconMeta?.tooltip,
+			}
+
+			if (toolMessage.type === 'tool_error') {
+				const { result } = toolMessage
+				componentParams.bottomChildren = <BottomChildren title='Error'>
+					<CodeChildren>{result}</CodeChildren>
+				</BottomChildren>
+			}
+
+			return <ToolHeaderWrapper {...componentParams} />
+		},
+	},
+
+	'browser_type': {
+		resultWrapper: ({ toolMessage }) => {
+			const accessor = useAccessor()
+			const title = getTitle(toolMessage)
+			const { desc1, desc1Info } = toolNameToDesc(toolMessage.name, toolMessage.params, accessor, toolMessage.rawParams)
+			const statusIconMeta = getToolStatusIconMeta(toolMessage)
+
+			if (toolMessage.type === 'tool_request') return null
+
+			const isError = false
+			const isRejected = toolMessage.type === 'rejected'
+			const componentParams: ToolHeaderParams = {
+				title,
+				desc1,
+				desc1Info,
+				isError,
+				isRejected,
+				icon: statusIconMeta?.icon,
+				iconTooltip: statusIconMeta?.tooltip,
+			}
+
+			if (toolMessage.type === 'tool_error') {
+				const { result } = toolMessage
+				componentParams.bottomChildren = <BottomChildren title='Error'>
+					<CodeChildren>{result}</CodeChildren>
+				</BottomChildren>
+			}
+
+			return <ToolHeaderWrapper {...componentParams} />
+		},
+	},
+
+	'browser_fill': {
+		resultWrapper: ({ toolMessage }) => {
+			const accessor = useAccessor()
+			const title = getTitle(toolMessage)
+			const { desc1, desc1Info } = toolNameToDesc(toolMessage.name, toolMessage.params, accessor, toolMessage.rawParams)
+			const statusIconMeta = getToolStatusIconMeta(toolMessage)
+
+			if (toolMessage.type === 'tool_request') return null
+
+			const isError = false
+			const isRejected = toolMessage.type === 'rejected'
+			const componentParams: ToolHeaderParams = {
+				title,
+				desc1,
+				desc1Info,
+				isError,
+				isRejected,
+				icon: statusIconMeta?.icon,
+				iconTooltip: statusIconMeta?.tooltip,
+			}
+
+			if (toolMessage.type === 'tool_error') {
+				const { result } = toolMessage
+				componentParams.bottomChildren = <BottomChildren title='Error'>
+					<CodeChildren>{result}</CodeChildren>
+				</BottomChildren>
+			}
+
+			return <ToolHeaderWrapper {...componentParams} />
+		},
+	},
+
+	'browser_press': {
+		resultWrapper: ({ toolMessage }) => {
+			const accessor = useAccessor()
+			const title = getTitle(toolMessage)
+			const { desc1, desc1Info } = toolNameToDesc(toolMessage.name, toolMessage.params, accessor, toolMessage.rawParams)
+			const statusIconMeta = getToolStatusIconMeta(toolMessage)
+
+			if (toolMessage.type === 'tool_request') return null
+
+			const isError = false
+			const isRejected = toolMessage.type === 'rejected'
+			const componentParams: ToolHeaderParams = {
+				title,
+				desc1,
+				desc1Info,
+				isError,
+				isRejected,
+				icon: statusIconMeta?.icon,
+				iconTooltip: statusIconMeta?.tooltip,
+			}
+
+			if (toolMessage.type === 'tool_error') {
+				const { result } = toolMessage
+				componentParams.bottomChildren = <BottomChildren title='Error'>
+					<CodeChildren>{result}</CodeChildren>
+				</BottomChildren>
+			}
+
+			return <ToolHeaderWrapper {...componentParams} />
+		},
+	},
+
+	'browser_hover': {
+		resultWrapper: ({ toolMessage }) => {
+			const accessor = useAccessor()
+			const title = getTitle(toolMessage)
+			const { desc1, desc1Info } = toolNameToDesc(toolMessage.name, toolMessage.params, accessor, toolMessage.rawParams)
+			const statusIconMeta = getToolStatusIconMeta(toolMessage)
+
+			if (toolMessage.type === 'tool_request') return null
+
+			const isError = false
+			const isRejected = toolMessage.type === 'rejected'
+			const componentParams: ToolHeaderParams = {
+				title,
+				desc1,
+				desc1Info,
+				isError,
+				isRejected,
+				icon: statusIconMeta?.icon,
+				iconTooltip: statusIconMeta?.tooltip,
+			}
+
+			if (toolMessage.type === 'tool_error') {
+				const { result } = toolMessage
+				componentParams.bottomChildren = <BottomChildren title='Error'>
+					<CodeChildren>{result}</CodeChildren>
+				</BottomChildren>
+			}
+
+			return <ToolHeaderWrapper {...componentParams} />
+		},
+	},
+
+	'browser_wait_for_selector': {
+		resultWrapper: ({ toolMessage }) => {
+			const accessor = useAccessor()
+			const title = getTitle(toolMessage)
+			const { desc1, desc1Info } = toolNameToDesc(toolMessage.name, toolMessage.params, accessor, toolMessage.rawParams)
+			const statusIconMeta = getToolStatusIconMeta(toolMessage)
+
+			if (toolMessage.type === 'tool_request') return null
+
+			const isError = false
+			const isRejected = toolMessage.type === 'rejected'
+			const componentParams: ToolHeaderParams = {
+				title,
+				desc1,
+				desc1Info,
+				isError,
+				isRejected,
+				icon: statusIconMeta?.icon,
+				iconTooltip: statusIconMeta?.tooltip,
+			}
+
+			if (toolMessage.type === 'tool_error') {
+				const { result } = toolMessage
+				componentParams.bottomChildren = <BottomChildren title='Error'>
+					<CodeChildren>{result}</CodeChildren>
+				</BottomChildren>
+			}
+
+			return <ToolHeaderWrapper {...componentParams} />
+		},
+	},
+
+	'browser_evaluate': {
+		resultWrapper: ({ toolMessage }) => {
+			const accessor = useAccessor()
+			const title = getTitle(toolMessage)
+			const { desc1, desc1Info } = toolNameToDesc(toolMessage.name, toolMessage.params, accessor, toolMessage.rawParams)
+			const statusIconMeta = getToolStatusIconMeta(toolMessage)
+
+			if (toolMessage.type === 'tool_request') return null
+
+			const isError = false
+			const isRejected = toolMessage.type === 'rejected'
+			const componentParams: ToolHeaderParams = {
+				title,
+				desc1,
+				desc1Info,
+				isError,
+				isRejected,
+				icon: statusIconMeta?.icon,
+				iconTooltip: statusIconMeta?.tooltip,
+			}
+
+			if (toolMessage.type === 'success') {
+				const { result } = toolMessage
+				componentParams.children = <CodeChildren>
+					<pre className='font-mono whitespace-pre-wrap text-xs'>{JSON.stringify(result.result, null, 2)}</pre>
+				</CodeChildren>
+			}
+			else if (toolMessage.type === 'tool_error') {
+				const { result } = toolMessage
+				componentParams.bottomChildren = <BottomChildren title='Error'>
+					<CodeChildren>{result}</CodeChildren>
+				</BottomChildren>
+			}
+
+			return <ToolHeaderWrapper {...componentParams} />
+		},
+	},
+
+	'browser_back': {
+		resultWrapper: ({ toolMessage }) => {
+			const accessor = useAccessor()
+			const title = getTitle(toolMessage)
+			const { desc1, desc1Info } = toolNameToDesc(toolMessage.name, toolMessage.params, accessor, toolMessage.rawParams)
+			const statusIconMeta = getToolStatusIconMeta(toolMessage)
+
+			if (toolMessage.type === 'tool_request') return null
+
+			const isError = false
+			const isRejected = toolMessage.type === 'rejected'
+			const componentParams: ToolHeaderParams = {
+				title,
+				desc1,
+				desc1Info,
+				isError,
+				isRejected,
+				icon: statusIconMeta?.icon,
+				iconTooltip: statusIconMeta?.tooltip,
+			}
+
+			if (toolMessage.type === 'tool_error') {
+				const { result } = toolMessage
+				componentParams.bottomChildren = <BottomChildren title='Error'>
+					<CodeChildren>{result}</CodeChildren>
+				</BottomChildren>
+			}
+
+			return <ToolHeaderWrapper {...componentParams} />
+		},
+	},
+
+	'browser_forward': {
+		resultWrapper: ({ toolMessage }) => {
+			const accessor = useAccessor()
+			const title = getTitle(toolMessage)
+			const { desc1, desc1Info } = toolNameToDesc(toolMessage.name, toolMessage.params, accessor, toolMessage.rawParams)
+			const statusIconMeta = getToolStatusIconMeta(toolMessage)
+
+			if (toolMessage.type === 'tool_request') return null
+
+			const isError = false
+			const isRejected = toolMessage.type === 'rejected'
+			const componentParams: ToolHeaderParams = {
+				title,
+				desc1,
+				desc1Info,
+				isError,
+				isRejected,
+				icon: statusIconMeta?.icon,
+				iconTooltip: statusIconMeta?.tooltip,
+			}
+
+			if (toolMessage.type === 'tool_error') {
+				const { result } = toolMessage
+				componentParams.bottomChildren = <BottomChildren title='Error'>
+					<CodeChildren>{result}</CodeChildren>
+				</BottomChildren>
+			}
+
+			return <ToolHeaderWrapper {...componentParams} />
+		},
+	},
+
+	'browser_reload': {
+		resultWrapper: ({ toolMessage }) => {
+			const accessor = useAccessor()
+			const title = getTitle(toolMessage)
+			const { desc1, desc1Info } = toolNameToDesc(toolMessage.name, toolMessage.params, accessor, toolMessage.rawParams)
+			const statusIconMeta = getToolStatusIconMeta(toolMessage)
+
+			if (toolMessage.type === 'tool_request') return null
+
+			const isError = false
+			const isRejected = toolMessage.type === 'rejected'
+			const componentParams: ToolHeaderParams = {
+				title,
+				desc1,
+				desc1Info,
+				isError,
+				isRejected,
+				icon: statusIconMeta?.icon,
+				iconTooltip: statusIconMeta?.tooltip,
+			}
+
+			if (toolMessage.type === 'tool_error') {
+				const { result } = toolMessage
+				componentParams.bottomChildren = <BottomChildren title='Error'>
+					<CodeChildren>{result}</CodeChildren>
+				</BottomChildren>
+			}
+
+			return <ToolHeaderWrapper {...componentParams} />
+		},
+	},
+
+	'browser_get_current_url': {
+		resultWrapper: ({ toolMessage }) => {
+			const accessor = useAccessor()
+			const title = getTitle(toolMessage)
+			const { desc1, desc1Info } = toolNameToDesc(toolMessage.name, toolMessage.params, accessor, toolMessage.rawParams)
+			const statusIconMeta = getToolStatusIconMeta(toolMessage)
+
+			if (toolMessage.type === 'tool_request') return null
+
+			const isError = false
+			const isRejected = toolMessage.type === 'rejected'
+			const componentParams: ToolHeaderParams = {
+				title,
+				desc1,
+				desc1Info,
+				isError,
+				isRejected,
+				icon: statusIconMeta?.icon,
+				iconTooltip: statusIconMeta?.tooltip,
+			}
+
+			if (toolMessage.type === 'success') {
+				const { result } = toolMessage
+				componentParams.children = <CodeChildren>
+					<span className='font-mono text-xs'>{result.url}</span>
+				</CodeChildren>
+			}
+			else if (toolMessage.type === 'tool_error') {
+				const { result } = toolMessage
+				componentParams.bottomChildren = <BottomChildren title='Error'>
+					<CodeChildren>{result}</CodeChildren>
+				</BottomChildren>
+			}
+
+			return <ToolHeaderWrapper {...componentParams} />
+		},
+	},
+
+	'browser_close': {
+		resultWrapper: ({ toolMessage }) => {
+			const accessor = useAccessor()
+			const title = getTitle(toolMessage)
+			const { desc1, desc1Info } = toolNameToDesc(toolMessage.name, toolMessage.params, accessor, toolMessage.rawParams)
+			const statusIconMeta = getToolStatusIconMeta(toolMessage)
+
+			if (toolMessage.type === 'tool_request') return null
+
+			const isError = false
+			const isRejected = toolMessage.type === 'rejected'
+			const componentParams: ToolHeaderParams = {
+				title,
+				desc1,
+				desc1Info,
+				isError,
+				isRejected,
+				icon: statusIconMeta?.icon,
+				iconTooltip: statusIconMeta?.tooltip,
+			}
+
+			if (toolMessage.type === 'tool_error') {
+				const { result } = toolMessage
+				componentParams.bottomChildren = <BottomChildren title='Error'>
+					<CodeChildren>{result}</CodeChildren>
+				</BottomChildren>
+			}
+
+			return <ToolHeaderWrapper {...componentParams} />
+		},
+	},
+} satisfies { [T in BuiltinToolName]: { resultWrapper: ResultWrapper<T> } };
 
 
 const Checkpoint = ({ message, threadId, messageIdx, isCheckpointGhost, threadIsRunning }: { message: CheckpointEntry, threadId: string; messageIdx: number, isCheckpointGhost: boolean, threadIsRunning: boolean }) => {
@@ -3688,9 +4411,7 @@ const CommandBarInChat = () => {
 
 
 
-const EditToolSoFar = ({ toolCallSoFar }: { toolCallSoFar: RawToolCallObj }) => {
-	if (!isABuiltinToolName(toolCallSoFar.name)) return null
-
+const StreamingTool = ({ toolCallSoFar }: { toolCallSoFar: RawToolCallObj }) => {
 	const accessor = useAccessor()
 
 	// Safely parse URI
@@ -3700,14 +4421,37 @@ const EditToolSoFar = ({ toolCallSoFar }: { toolCallSoFar: RawToolCallObj }) => 
 			uri = URI.file(toolCallSoFar.rawParams.uri)
 		}
 	} catch (e) {
-		console.warn('Failed to parse URI for EditToolSoFar:', e)
+		console.warn('Failed to parse URI for StreamingTool:', e)
 	}
 
-	const title = titleOfBuiltinToolName[toolCallSoFar.name]?.proposed || 'Editing file'
+	const toolName = toolCallSoFar.name
+	if (!toolName) return null
+
+	const isEditTool = toolName === 'edit_file' || toolName === 'rewrite_file'
+
+	let title = 'Tool'
+	if (isABuiltinToolName(toolName)) {
+		// Use existing titleOfBuiltinToolName definition
+		const toolInfo = (titleOfBuiltinToolName as any)[toolName]
+		title = toolInfo?.proposed || toolInfo?.done || toolName
+	} else {
+		title = toolName
+	}
 
 	const uriDone = toolCallSoFar.doneParams?.includes('uri') ?? false
 	const uriStr = toolCallSoFar.rawParams['uri'] as string | undefined
-	const desc1 = uriDone && uriStr ? getBasename(uriStr) : 'Generating...'
+
+	// If it's a file-related tool and we have a URI, just show the filename as the title immediately
+	// This makes it feel faster/more responsive than 'Reading file...' -> 'filename'
+	if (uriStr && (toolName === 'read_file' || toolName === 'edit_file' || toolName === 'rewrite_file' || toolName === 'search_in_file')) {
+		const basename = getBasename(uriStr)
+		if (toolName === 'read_file') title = `Reading file (${basename})`
+		else if (toolName === 'edit_file' || toolName === 'rewrite_file') title = `Editing file (${basename})`
+		else if (toolName === 'search_in_file') title = `Searching in file (${basename})`
+		else title = basename
+	}
+
+	const desc1 = uriDone && uriStr ? getBasename(uriStr) : (uriStr ? getBasename(uriStr) : '...')
 
 	const desc1OnClick = uri ? () => voidOpenFileFn(uri, accessor) : undefined
 
@@ -3718,8 +4462,8 @@ const EditToolSoFar = ({ toolCallSoFar }: { toolCallSoFar: RawToolCallObj }) => 
 	// Get the code being generated
 	const code = (toolCallSoFar.rawParams.search_replace_blocks ?? toolCallSoFar.rawParams.new_content ?? '') as string
 
-	// Determine if we have any code to display
-	const hasCode = !!(code && code.length > 0)
+	// Determine if we have any code to display (only for edit tools)
+	const hasCode = isEditTool && !!(code && code.length > 0)
 
 	return (
 		<ToolHeaderWrapper
@@ -3769,7 +4513,7 @@ export const SidebarChat = () => {
 	const currThreadStreamState = useChatThreadsStreamState(chatThreadsState.currentThreadId)
 	const isRunning = currThreadStreamState?.isRunning
 	const latestError = currThreadStreamState?.error
-	const { displayContentSoFar, toolCallSoFar, reasoningSoFar } = currThreadStreamState?.llmInfo ?? {}
+	const { displayContentSoFar, toolCallSoFar, toolCallsSoFar, reasoningSoFar } = currThreadStreamState?.llmInfo ?? {}
 
 	// this is just if it's currently being generated, NOT if it's currently running
 	const toolIsGenerating = toolCallSoFar && !toolCallSoFar.isDone // show loading for slow tools (right now just edit)
@@ -4010,14 +4754,18 @@ export const SidebarChat = () => {
 		</div> : null
 
 
-	// the tool currently being generated
-	const generatingTool = toolIsGenerating ?
-		toolCallSoFar.name === 'edit_file' || toolCallSoFar.name === 'rewrite_file' ? <EditToolSoFar
-			key={'curr-streaming-tool'}
-			toolCallSoFar={toolCallSoFar}
+	// the tools currently being generated
+	// Prefer toolCallsSoFar (list) over toolCallSoFar (single)
+	const streamingToolsToRender = (toolCallsSoFar && toolCallsSoFar.length > 0)
+		? toolCallsSoFar
+		: (toolIsGenerating && toolCallSoFar ? [toolCallSoFar] : [])
+
+	const generatingTools = streamingToolsToRender.map((tool, i) => (
+		<StreamingTool
+			key={`curr-streaming-tool-${i}`}
+			toolCallSoFar={tool}
 		/>
-			: null
-		: null
+	))
 
 	const messagesHTML = <ScrollToBottomContainer
 		key={'messages' + chatThreadsState.currentThreadId} // force rerender on all children if id changes
@@ -4035,8 +4783,8 @@ export const SidebarChat = () => {
 		{previousMessagesHTML}
 		{currStreamingMessageHTML}
 
-		{/* Generating tool */}
-		{generatingTool}
+		{/* Generating tools */}
+		{generatingTools}
 
 		{/* loading indicator - show when AI is processing but no visible content yet */}
 		{isWaitingForAIResponse ? <ProseWrapper>

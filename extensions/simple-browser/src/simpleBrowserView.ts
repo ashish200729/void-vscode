@@ -32,6 +32,7 @@ export class SimpleBrowserView extends Disposable {
 	}
 
 	private readonly _webviewPanel: vscode.WebviewPanel;
+	private _isInitialized = false;
 
 	private readonly _onDidDispose = this._register(new vscode.EventEmitter<void>());
 	public readonly onDispose = this._onDidDispose.event;
@@ -79,6 +80,22 @@ export class SimpleBrowserView extends Disposable {
 						// Noop
 					}
 					break;
+				case 'navigate':
+					// Forward navigation request to backend via command
+					vscode.commands.executeCommand('simpleBrowser.navigate', e.url);
+					break;
+				case 'back':
+					// Forward back request to backend via command
+					vscode.commands.executeCommand('simpleBrowser.back');
+					break;
+				case 'forward':
+					// Forward forward request to backend via command
+					vscode.commands.executeCommand('simpleBrowser.forward');
+					break;
+				case 'reload':
+					// Forward reload request to backend via command
+					vscode.commands.executeCommand('simpleBrowser.reload');
+					break;
 			}
 		}));
 
@@ -104,9 +121,78 @@ export class SimpleBrowserView extends Disposable {
 		super.dispose();
 	}
 
+	/**
+	 * Close the browser panel
+	 */
+	public close(): void {
+		// Dispose the webview panel which will close it
+		this._webviewPanel.dispose();
+	}
+
 	public show(url: string, options?: ShowOptions) {
-		this._webviewPanel.webview.html = this.getHtml(url);
+		// Only regenerate HTML on first call
+		if (!this._isInitialized) {
+			this._webviewPanel.webview.html = this.getHtml(url);
+			this._isInitialized = true;
+		} else {
+			// Use message protocol for subsequent updates
+			this.updateState(url, false, false); // TODO: get actual history state from automation
+		}
 		this._webviewPanel.reveal(options?.viewColumn, options?.preserveFocus);
+	}
+
+	/**
+	 * Update webview state using message protocol (lightweight, preserves iframe state)
+	 */
+	public updateState(url: string, canGoBack: boolean, canGoForward: boolean): void {
+		this._webviewPanel.webview.postMessage({
+			type: 'updateState',
+			url,
+			canGoBack,
+			canGoForward
+		});
+	}
+
+	/**
+	 * Show loading indicator in webview
+	 */
+	public showLoading(): void {
+		this._webviewPanel.webview.postMessage({ type: 'showLoading' });
+	}
+
+	/**
+	 * Hide loading indicator in webview
+	 */
+	public hideLoading(): void {
+		this._webviewPanel.webview.postMessage({ type: 'hideLoading' });
+	}
+
+	/**
+	 * Show error overlay in webview
+	 */
+	public showError(message: string): void {
+		this._webviewPanel.webview.postMessage({ type: 'showError', message });
+	}
+
+	/**
+	 * Scroll to specific coordinates in webview
+	 */
+	public scrollTo(x: number, y: number): void {
+		this._webviewPanel.webview.postMessage({ type: 'scrollTo', x, y });
+	}
+
+	/**
+	 * Scroll by delta in webview
+	 */
+	public scrollBy(deltaX: number, deltaY: number): void {
+		this._webviewPanel.webview.postMessage({ type: 'scrollBy', deltaX, deltaY });
+	}
+
+	/**
+	 * Scroll element into view in webview
+	 */
+	public scrollIntoView(selector: string): void {
+		this._webviewPanel.webview.postMessage({ type: 'scrollIntoView', selector });
 	}
 
 	private getHtml(url: string) {

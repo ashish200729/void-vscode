@@ -19,6 +19,8 @@ import { RawToolParamsObj } from '../common/sendLLMMessageTypes.js'
 import { MAX_CHILDREN_URIs_PAGE, MAX_FILE_CHARS_PAGE, MAX_TERMINAL_BG_COMMAND_TIME, MAX_TERMINAL_INACTIVE_TIME } from '../common/prompt/prompts.js'
 import { IVoidSettingsService } from '../common/voidSettingsService.js'
 import { generateUuid } from '../../../../base/common/uuid.js'
+import { IEmbeddedBrowserService } from '../../../../platform/embeddedBrowser/common/embeddedBrowser.js'
+import { ICommandService } from '../../../../platform/commands/common/commands.js'
 
 
 // tool use for AI
@@ -145,6 +147,11 @@ export class ToolsService implements IToolsService {
 	private _mutatingToolInProgress: boolean = false;
 	private _currentMutatingTool: string | null = null;
 
+	// Browser session management
+	// Use the simple-browser extension's session ID for proper UI synchronization
+	private readonly _defaultBrowserSessionId = 'simple-browser-default';
+	private _browserSessionInitialized: boolean = false;
+
 	constructor(
 		@IFileService fileService: IFileService,
 		@IWorkspaceContextService workspaceContextService: IWorkspaceContextService,
@@ -157,6 +164,8 @@ export class ToolsService implements IToolsService {
 		@IDirectoryStrService private readonly directoryStrService: IDirectoryStrService,
 		@IMarkerService private readonly markerService: IMarkerService,
 		@IVoidSettingsService private readonly voidSettingsService: IVoidSettingsService,
+		@IEmbeddedBrowserService private readonly embeddedBrowserService: IEmbeddedBrowserService,
+		@ICommandService private readonly commandService: ICommandService,
 	) {
 		const queryBuilder = instantiationService.createInstance(QueryBuilder);
 
@@ -292,6 +301,108 @@ export class ToolsService implements IToolsService {
 				const { persistent_terminal_id: terminalIdUnknown } = params;
 				const persistentTerminalId = validateProposedTerminalId(terminalIdUnknown);
 				return { persistentTerminalId };
+			},
+
+			// ========================================
+			// BROWSER TOOLS
+			// ========================================
+
+			browser_open: (params: RawToolParamsObj) => {
+				const { url: urlUnknown } = params;
+				// URL is optional - defaults to Google if not provided
+				const url = urlUnknown ? validateStr('url', urlUnknown) : null;
+				if (url && !url.startsWith('http://') && !url.startsWith('https://')) {
+					throw new Error('URL must start with http:// or https://');
+				}
+				return { url };
+			},
+
+			browser_navigate: (params: RawToolParamsObj) => {
+				const { url: urlUnknown } = params;
+				const url = validateStr('url', urlUnknown);
+				// Basic URL validation - must start with http:// or https://
+				if (!url.startsWith('http://') && !url.startsWith('https://')) {
+					throw new Error('URL must start with http:// or https://');
+				}
+				return { url };
+			},
+
+			browser_screenshot: (_params: RawToolParamsObj) => {
+				return {};
+			},
+
+			browser_get_content: (_params: RawToolParamsObj) => {
+				return {};
+			},
+
+			browser_get_accessibility_tree: (_params: RawToolParamsObj) => {
+				return {};
+			},
+
+			browser_click: (params: RawToolParamsObj) => {
+				const { selector: selectorUnknown } = params;
+				const selector = validateStr('selector', selectorUnknown);
+				return { selector };
+			},
+
+			browser_type: (params: RawToolParamsObj) => {
+				const { selector: selectorUnknown, text: textUnknown, delay: delayUnknown } = params;
+				const selector = validateStr('selector', selectorUnknown);
+				const text = validateStr('text', textUnknown);
+				const delay = validateNumber(delayUnknown, { default: null });
+				return { selector, text, delay };
+			},
+
+			browser_fill: (params: RawToolParamsObj) => {
+				const { selector: selectorUnknown, value: valueUnknown } = params;
+				const selector = validateStr('selector', selectorUnknown);
+				const value = validateStr('value', valueUnknown);
+				return { selector, value };
+			},
+
+			browser_press: (params: RawToolParamsObj) => {
+				const { key: keyUnknown } = params;
+				const key = validateStr('key', keyUnknown);
+				return { key };
+			},
+
+			browser_hover: (params: RawToolParamsObj) => {
+				const { selector: selectorUnknown } = params;
+				const selector = validateStr('selector', selectorUnknown);
+				return { selector };
+			},
+
+			browser_wait_for_selector: (params: RawToolParamsObj) => {
+				const { selector: selectorUnknown, timeout: timeoutUnknown } = params;
+				const selector = validateStr('selector', selectorUnknown);
+				const timeout = validateNumber(timeoutUnknown, { default: null });
+				return { selector, timeout };
+			},
+
+			browser_evaluate: (params: RawToolParamsObj) => {
+				const { script: scriptUnknown } = params;
+				const script = validateStr('script', scriptUnknown);
+				return { script };
+			},
+
+			browser_back: (_params: RawToolParamsObj) => {
+				return {};
+			},
+
+			browser_forward: (_params: RawToolParamsObj) => {
+				return {};
+			},
+
+			browser_reload: (_params: RawToolParamsObj) => {
+				return {};
+			},
+
+			browser_get_current_url: (_params: RawToolParamsObj) => {
+				return {};
+			},
+
+			browser_close: (_params: RawToolParamsObj) => {
+				return {};
 			},
 
 		}
@@ -527,6 +638,225 @@ export class ToolsService implements IToolsService {
 					this._releaseMutatingLock();
 				}
 			},
+
+			// ========================================
+			// BROWSER TOOLS
+			// ========================================
+
+			browser_open: async ({ url }) => {
+				this._acquireMutatingLock('browser_open');
+				try {
+					// Call the simple-browser extension command to open the visible browser panel
+					// This also creates/syncs the backend automation session
+					await this.commandService.executeCommand('simpleBrowser.showAgenticBrowser', url || 'https://www.google.com');
+					this._browserSessionInitialized = true;
+					return { result: {} };
+				} catch (error) {
+					throw this._formatBrowserError(error, 'browser_open', { url: url || 'https://www.google.com' });
+				} finally {
+					this._releaseMutatingLock();
+				}
+			},
+
+			browser_navigate: async ({ url }) => {
+				this._acquireMutatingLock('browser_navigate');
+				try {
+					// Call the simple-browser extension command to navigate
+					// This ensures the visible browser panel is synced with backend
+					await this.commandService.executeCommand('simpleBrowser.navigate', url);
+					return { result: {} };
+				} catch (error) {
+					throw this._formatBrowserError(error, 'browser_navigate', { url });
+				} finally {
+					this._releaseMutatingLock();
+				}
+			},
+
+			browser_screenshot: async () => {
+				this._acquireMutatingLock('browser_screenshot');
+				try {
+					const screenshot = await this.embeddedBrowserService.screenshot(this._defaultBrowserSessionId);
+					return { result: { screenshot } };
+				} catch (error) {
+					throw this._formatBrowserError(error, 'browser_screenshot', {});
+				} finally {
+					this._releaseMutatingLock();
+				}
+			},
+
+			browser_get_content: async () => {
+				this._acquireMutatingLock('browser_get_content');
+				try {
+					const html = await this.embeddedBrowserService.getContent(this._defaultBrowserSessionId);
+					return { result: { html } };
+				} catch (error) {
+					throw this._formatBrowserError(error, 'browser_get_content', {});
+				} finally {
+					this._releaseMutatingLock();
+				}
+			},
+
+			browser_get_accessibility_tree: async () => {
+				this._acquireMutatingLock('browser_get_accessibility_tree');
+				try {
+					const tree = await this.embeddedBrowserService.getAccessibilityTree(this._defaultBrowserSessionId);
+					return { result: { tree } };
+				} catch (error) {
+					throw this._formatBrowserError(error, 'browser_get_accessibility_tree', {});
+				} finally {
+					this._releaseMutatingLock();
+				}
+			},
+
+			browser_click: async ({ selector }) => {
+				this._acquireMutatingLock('browser_click');
+				try {
+					// Call simple-browser extension command to ensure UI synchronization
+					await this.commandService.executeCommand('simpleBrowser.click', selector);
+					return { result: {} };
+				} catch (error) {
+					throw this._formatBrowserError(error, 'browser_click', { selector });
+				} finally {
+					this._releaseMutatingLock();
+				}
+			},
+
+			browser_type: async ({ selector, text, delay }) => {
+				this._acquireMutatingLock('browser_type');
+				try {
+					await this.embeddedBrowserService.type(this._defaultBrowserSessionId, selector, text, { delay: delay || undefined });
+					return { result: {} };
+				} catch (error) {
+					throw this._formatBrowserError(error, 'browser_type', { selector, text });
+				} finally {
+					this._releaseMutatingLock();
+				}
+			},
+
+			browser_fill: async ({ selector, value }) => {
+				this._acquireMutatingLock('browser_fill');
+				try {
+					await this.embeddedBrowserService.fill(this._defaultBrowserSessionId, selector, value);
+					return { result: {} };
+				} catch (error) {
+					throw this._formatBrowserError(error, 'browser_fill', { selector, value });
+				} finally {
+					this._releaseMutatingLock();
+				}
+			},
+
+			browser_press: async ({ key }) => {
+				this._acquireMutatingLock('browser_press');
+				try {
+					await this.embeddedBrowserService.press(this._defaultBrowserSessionId, key);
+					return { result: {} };
+				} catch (error) {
+					throw this._formatBrowserError(error, 'browser_press', { key });
+				} finally {
+					this._releaseMutatingLock();
+				}
+			},
+
+			browser_hover: async ({ selector }) => {
+				this._acquireMutatingLock('browser_hover');
+				try {
+					await this.embeddedBrowserService.hover(this._defaultBrowserSessionId, selector);
+					return { result: {} };
+				} catch (error) {
+					throw this._formatBrowserError(error, 'browser_hover', { selector });
+				} finally {
+					this._releaseMutatingLock();
+				}
+			},
+
+			browser_wait_for_selector: async ({ selector, timeout }) => {
+				this._acquireMutatingLock('browser_wait_for_selector');
+				try {
+					await this.embeddedBrowserService.waitForSelector(this._defaultBrowserSessionId, selector, timeout || undefined);
+					return { result: {} };
+				} catch (error) {
+					throw this._formatBrowserError(error, 'browser_wait_for_selector', { selector });
+				} finally {
+					this._releaseMutatingLock();
+				}
+			},
+
+			browser_evaluate: async ({ script }) => {
+				this._acquireMutatingLock('browser_evaluate');
+				try {
+					const result = await this.embeddedBrowserService.evaluate(this._defaultBrowserSessionId, script);
+					return { result: { result } };
+				} catch (error) {
+					throw this._formatBrowserError(error, 'browser_evaluate', { script });
+				} finally {
+					this._releaseMutatingLock();
+				}
+			},
+
+			browser_back: async () => {
+				this._acquireMutatingLock('browser_back');
+				try {
+					// Call simple-browser extension command to ensure UI synchronization
+					await this.commandService.executeCommand('simpleBrowser.back');
+					return { result: {} };
+				} catch (error) {
+					throw this._formatBrowserError(error, 'browser_back', {});
+				} finally {
+					this._releaseMutatingLock();
+				}
+			},
+
+			browser_forward: async () => {
+				this._acquireMutatingLock('browser_forward');
+				try {
+					// Call simple-browser extension command to ensure UI synchronization
+					await this.commandService.executeCommand('simpleBrowser.forward');
+					return { result: {} };
+				} catch (error) {
+					throw this._formatBrowserError(error, 'browser_forward', {});
+				} finally {
+					this._releaseMutatingLock();
+				}
+			},
+
+			browser_reload: async () => {
+				this._acquireMutatingLock('browser_reload');
+				try {
+					// Call simple-browser extension command to ensure UI synchronization
+					await this.commandService.executeCommand('simpleBrowser.reload');
+					return { result: {} };
+				} catch (error) {
+					throw this._formatBrowserError(error, 'browser_reload', {});
+				} finally {
+					this._releaseMutatingLock();
+				}
+			},
+
+			browser_get_current_url: async () => {
+				this._acquireMutatingLock('browser_get_current_url');
+				try {
+					const url = await this.embeddedBrowserService.getCurrentUrl(this._defaultBrowserSessionId);
+					return { result: { url: url || '' } };
+				} catch (error) {
+					throw this._formatBrowserError(error, 'browser_get_current_url', {});
+				} finally {
+					this._releaseMutatingLock();
+				}
+			},
+
+			browser_close: async () => {
+				this._acquireMutatingLock('browser_close');
+				try {
+					// Call the simple-browser extension command to close the browser
+					await this.commandService.executeCommand('simpleBrowser.closeBrowser');
+					this._browserSessionInitialized = false;
+					return { result: {} };
+				} catch (error) {
+					throw this._formatBrowserError(error, 'browser_close', {});
+				} finally {
+					this._releaseMutatingLock();
+				}
+			},
 		}
 
 
@@ -630,6 +960,83 @@ export class ToolsService implements IToolsService {
 			kill_persistent_terminal: (params, _result) => {
 				return `Successfully closed terminal "${params.persistentTerminalId}".`;
 			},
+
+			// ========================================
+			// BROWSER TOOLS
+			// ========================================
+
+			browser_open: (params, _result) => {
+				return `Successfully opened browser${params.url ? ` at ${params.url}` : ''}`;
+			},
+
+			browser_navigate: (params, _result) => {
+				return `Successfully navigated to ${params.url}`;
+			},
+
+			browser_screenshot: (_params, result) => {
+				const screenshotLength = result.screenshot?.length || 0;
+				const preview = screenshotLength > 100 ? result.screenshot.substring(0, 100) + '...' : result.screenshot;
+				return `Screenshot captured (${screenshotLength} bytes)\nBase64 PNG data: ${preview}`;
+			},
+
+			browser_get_content: (_params, result) => {
+				const html = result.html || '';
+				const truncated = html.length > 50000 ? html.substring(0, 50000) + '\n... [content truncated - showing first 50,000 characters]' : html;
+				return `Page HTML content (${html.length} characters):\n${truncated}`;
+			},
+
+			browser_get_accessibility_tree: (_params, result) => {
+				return `Accessibility Tree:\n${result.tree}`;
+			},
+
+			browser_click: (params, _result) => {
+				return `Successfully clicked element: ${params.selector}`;
+			},
+
+			browser_type: (params, _result) => {
+				return `Successfully typed "${params.text}" into element: ${params.selector}`;
+			},
+
+			browser_fill: (params, _result) => {
+				return `Successfully filled element ${params.selector} with value: ${params.value}`;
+			},
+
+			browser_press: (params, _result) => {
+				return `Successfully pressed key: ${params.key}`;
+			},
+
+			browser_hover: (params, _result) => {
+				return `Successfully hovered over element: ${params.selector}`;
+			},
+
+			browser_wait_for_selector: (params, _result) => {
+				return `Element found and ready: ${params.selector}`;
+			},
+
+			browser_evaluate: (_params, result) => {
+				const resultStr = typeof result.result === 'object' ? JSON.stringify(result.result, null, 2) : String(result.result);
+				return `JavaScript evaluation result:\n${resultStr}`;
+			},
+
+			browser_back: (_params, _result) => {
+				return `Successfully navigated back`;
+			},
+
+			browser_forward: (_params, _result) => {
+				return `Successfully navigated forward`;
+			},
+
+			browser_reload: (_params, _result) => {
+				return `Successfully reloaded page`;
+			},
+
+			browser_get_current_url: (_params, result) => {
+				return `Current URL: ${result.url}`;
+			},
+
+			browser_close: (_params, _result) => {
+				return `Successfully closed browser`;
+			},
 		}
 
 
@@ -666,6 +1073,64 @@ export class ToolsService implements IToolsService {
 		return { lintErrors, }
 	}
 
+	// Session is now managed by simple-browser extension via VS Code commands
+	// No need to create session here
+
+	private _formatBrowserError(error: any, toolName: string, params: any): Error {
+		let message = '';
+
+		const errorCode = error?.code || error?.name;
+
+		switch (errorCode) {
+			case 'ELEMENT_NOT_FOUND':
+				message = `Element not found: "${params.selector || 'unknown'}". The element may not exist on the page, or the selector may be incorrect. Try using browser_get_accessibility_tree to find valid selectors.`;
+				break;
+			case 'ELEMENT_NOT_VISIBLE':
+				message = `Element "${params.selector || 'unknown'}" exists but is not visible. It may be hidden by CSS (display:none, visibility:hidden) or off-screen. Try scrolling or waiting for it to appear.`;
+				break;
+			case 'ELEMENT_NOT_INTERACTABLE':
+				message = `Element "${params.selector || 'unknown'}" is not interactable. It may be covered by another element, disabled, or not ready yet. Try using browser_wait_for_selector first.`;
+				break;
+			case 'NAVIGATION_TIMEOUT':
+				message = `Navigation timed out. The page may be slow to load or unresponsive. Try increasing timeout or checking the URL.`;
+				break;
+			case 'NAVIGATION_FAILED':
+				message = `Navigation to "${params.url || 'unknown'}" failed. Check that the URL is correct and accessible.`;
+				break;
+			case 'INVALID_SELECTOR':
+				message = `Invalid CSS selector: "${params.selector || 'unknown'}". Make sure the selector syntax is valid CSS.`;
+				break;
+			case 'INVALID_URL':
+				message = `Invalid URL: "${params.url || 'unknown'}". URLs must start with http:// or https://.`;
+				break;
+			case 'SESSION_NOT_FOUND':
+				message = `Browser session not found. The browser may have been closed. Will attempt to recreate the session automatically.`;
+				this._browserSessionInitialized = false; // Auto-recreate on next operation
+				break;
+			case 'OPERATION_TIMEOUT':
+				message = `Operation timed out after ${error.details?.timeout || 30000}ms. The page may be slow or the element may not appear. Try increasing timeout with browser_wait_for_selector.`;
+				break;
+			case 'SCRIPT_EXECUTION_FAILED':
+				message = `JavaScript execution failed: ${error.details?.message || 'Unknown error'}. Check the script syntax and ensure it doesn't reference undefined variables.`;
+				break;
+			default:
+				message = error?.message || 'Unknown browser error';
+		}
+
+		return new Error(`Browser error in ${toolName}: ${message}`);
+	}
+
+	public dispose(): void {
+		// Clean up browser session on disposal
+		if (this._browserSessionInitialized) {
+			this.embeddedBrowserService.destroySession(this._defaultBrowserSessionId)
+				.catch(err => {
+					// Session may already be destroyed, which is fine
+					console.warn('Failed to cleanup browser session on dispose:', err);
+				});
+			this._browserSessionInitialized = false;
+		}
+	}
 
 }
 

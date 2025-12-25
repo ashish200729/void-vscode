@@ -40,9 +40,7 @@ const errorOverlay = document.querySelector<HTMLElement>('.error-overlay')!;
 const errorMessage = document.querySelector<HTMLElement>('.error-message')!;
 const errorRetryButton = document.querySelector<HTMLButtonElement>('.error-retry-button')!;
 
-// Navigation history management
-const navigationHistory: string[] = [];
-let currentHistoryIndex = -1;
+// Navigation constants
 const homeUrl = 'https://www.google.com/';
 const searchEngineUrl = 'https://www.google.com/search?q=';
 
@@ -138,6 +136,84 @@ window.addEventListener('message', e => {
 				toggleFocusLockIndicatorEnabled(e.data.enabled);
 				break;
 			}
+		case 'updateState':
+			{
+				// Lightweight state update without HTML regeneration
+				const { url, canGoBack, canGoForward } = e.data;
+
+				// Update URL bar
+				input.value = formatUrlForDisplay(url);
+				updateSecurityIcon(url);
+
+				// Update navigation buttons
+				backButton.disabled = !canGoBack;
+				forwardButton.disabled = !canGoForward;
+
+				// Update iframe if URL changed
+				const currentIframeSrc = iframe.src;
+				const normalizedNewUrl = normalizeUrl(url);
+				if (currentIframeSrc !== normalizedNewUrl && normalizedNewUrl) {
+					iframe.src = normalizedNewUrl;
+				}
+				break;
+			}
+		case 'showLoading':
+			{
+				document.body.classList.add('loading');
+				break;
+			}
+		case 'hideLoading':
+			{
+				if (typeof hideLoading === 'function') {
+					hideLoading();
+				} else {
+					document.body.classList.remove('loading');
+				}
+				break;
+			}
+		case 'showError':
+			{
+				if (typeof showError === 'function') {
+					showError(e.data.message);
+				}
+				break;
+			}
+		case 'scrollTo':
+			{
+				// Scroll the iframe's content window
+				try {
+					iframe.contentWindow?.scrollTo(e.data.x, e.data.y);
+				} catch (err) {
+					// Ignore cross-origin errors
+				}
+				break;
+			}
+		case 'scrollBy':
+			{
+				// Scroll the iframe's content window
+				try {
+					iframe.contentWindow?.scrollBy(e.data.deltaX, e.data.deltaY);
+				} catch (err) {
+					// Ignore cross-origin errors
+				}
+				break;
+			}
+		case 'scrollIntoView':
+			{
+				// Scroll element into view in the iframe
+				try {
+					const doc = iframe.contentWindow?.document;
+					if (doc) {
+						const element = doc.querySelector(e.data.selector);
+						if (element) {
+							element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+						}
+					}
+				} catch (err) {
+					// Ignore cross-origin errors or selector errors
+				}
+				break;
+			}
 	}
 });
 
@@ -147,10 +223,10 @@ onceDocumentLoaded(() => {
 		document.body.classList.toggle('iframe-focused', iframeFocused);
 	}, 50);
 
-	// Update button states
-	function updateNavigationButtons() {
-		backButton.disabled = currentHistoryIndex <= 0;
-		forwardButton.disabled = currentHistoryIndex >= navigationHistory.length - 1;
+	// Update button states based on backend history
+	function updateNavigationButtons(canGoBack: boolean, canGoForward: boolean) {
+		backButton.disabled = !canGoBack;
+		forwardButton.disabled = !canGoForward;
 	}
 
 	// Clear loading timeout
@@ -182,8 +258,6 @@ onceDocumentLoaded(() => {
 	}
 
 	iframe.addEventListener('load', () => {
-		// Update button states when iframe loads
-		updateNavigationButtons();
 		// Hide loading indicator
 		hideLoading();
 		// Hide any error overlay
@@ -198,20 +272,25 @@ onceDocumentLoaded(() => {
 	input.addEventListener('change', e => {
 		const inputValue = (e.target as HTMLInputElement).value;
 		const url = inputToUrl(inputValue);
-		navigateTo(url, true);
+		// Send navigation request to backend
+		vscode.postMessage({
+			type: 'navigate',
+			url: url
+		});
 	});
 
 	// Handle Enter key press
 	input.addEventListener('keydown', e => {
 		if (e.key === 'Enter') {
 			const url = inputToUrl(input.value);
-			navigateTo(url, true);
+			// Send navigation request to backend
+			vscode.postMessage({
+				type: 'navigate',
+				url: url
+			});
 			input.blur();
 		} else if (e.key === 'Escape') {
-			// Restore current URL and blur
-			if (navigationHistory[currentHistoryIndex]) {
-				input.value = formatUrlForDisplay(navigationHistory[currentHistoryIndex]);
-			}
+			// Just blur and reset to current displayed URL
 			input.blur();
 		}
 	});
@@ -228,23 +307,25 @@ onceDocumentLoaded(() => {
 	});
 
 	forwardButton.addEventListener('click', () => {
-		if (currentHistoryIndex < navigationHistory.length - 1) {
-			currentHistoryIndex++;
-			const url = navigationHistory[currentHistoryIndex];
-			navigateTo(url, false);
-		}
+		// Send forward request to backend
+		vscode.postMessage({
+			type: 'forward'
+		});
 	});
 
 	backButton.addEventListener('click', () => {
-		if (currentHistoryIndex > 0) {
-			currentHistoryIndex--;
-			const url = navigationHistory[currentHistoryIndex];
-			navigateTo(url, false);
-		}
+		// Send back request to backend
+		vscode.postMessage({
+			type: 'back'
+		});
 	});
 
 	homeButton.addEventListener('click', () => {
-		navigateTo(homeUrl, true);
+		// Send navigate to home URL request to backend
+		vscode.postMessage({
+			type: 'navigate',
+			url: homeUrl
+		});
 	});
 
 	openExternalButton.addEventListener('click', () => {
@@ -256,82 +337,37 @@ onceDocumentLoaded(() => {
 
 	errorRetryButton.addEventListener('click', () => {
 		hideError();
-		if (navigationHistory[currentHistoryIndex]) {
-			navigateTo(navigationHistory[currentHistoryIndex], false);
-		}
+		// Send reload request to backend
+		vscode.postMessage({
+			type: 'reload'
+		});
 	});
 
 	reloadButton.addEventListener('click', () => {
-		// Reload the current page
-		if (navigationHistory[currentHistoryIndex]) {
-			navigateTo(navigationHistory[currentHistoryIndex], false);
-		}
+		// Send reload request to backend
+		vscode.postMessage({
+			type: 'reload'
+		});
 	});
 
 	const initialUrl = normalizeUrl(settings.url) || homeUrl;
-	navigateTo(initialUrl, true);
 
-	toggleFocusLockIndicatorEnabled(settings.focusLockIndicatorEnabled);
-
-	function navigateTo(rawUrl: string, addToHistory: boolean): void {
-		const normalizedUrl = normalizeUrl(rawUrl);
-
-		if (!normalizedUrl) {
-			return;
-		}
-
-		// Hide any previous error
-		hideError();
-
-		// Show loading indicator
+	// Initial page load - just set iframe src directly
+	// Backend will handle navigation from this point
+	if (initialUrl) {
+		iframe.src = initialUrl;
+		input.value = formatUrlForDisplay(initialUrl);
+		updateSecurityIcon(initialUrl);
 		document.body.classList.add('loading');
 
-		// Set loading timeout
-		clearLoadingTimeout();
-		loadingTimeout = window.setTimeout(() => {
-			showError('The page took too long to load. Please check your connection and try again.');
-		}, LOADING_TIMEOUT_MS);
-
-		// Update security icon
-		updateSecurityIcon(normalizedUrl);
-
-		try {
-			const url = new URL(normalizedUrl);
-
-			// Try to bust the cache for the iframe
-			// There does not appear to be any way to reliably do this except modifying the url
-			url.searchParams.append('vscodeBrowserReqId', Date.now().toString());
-
-			const finalUrl = url.toString();
-			iframe.src = finalUrl;
-
-			// Show clean URL without the vscodeBrowserReqId parameter
-			input.value = formatUrlForDisplay(normalizedUrl);
-
-			// Add to history if this is a new navigation
-			if (addToHistory) {
-				// Remove any forward history
-				navigationHistory.splice(currentHistoryIndex + 1);
-				navigationHistory.push(normalizedUrl);
-				currentHistoryIndex = navigationHistory.length - 1;
-			}
-
-			updateNavigationButtons();
-		} catch {
-			iframe.src = normalizedUrl;
-			input.value = normalizedUrl;
-
-			if (addToHistory && normalizedUrl) {
-				navigationHistory.splice(currentHistoryIndex + 1);
-				navigationHistory.push(normalizedUrl);
-				currentHistoryIndex = navigationHistory.length - 1;
-			}
-
-			updateNavigationButtons();
-		}
-
-		vscode.setState({ url: normalizedUrl });
+		// Also notify backend about initial URL (if needed)
+		vscode.postMessage({
+			type: 'navigate',
+			url: initialUrl
+		});
 	}
+
+	toggleFocusLockIndicatorEnabled(settings.focusLockIndicatorEnabled);
 });
 
 function toggleFocusLockIndicatorEnabled(enabled: boolean) {

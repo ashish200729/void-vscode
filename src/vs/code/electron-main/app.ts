@@ -133,6 +133,8 @@ import { LLMMessageChannel } from '../../workbench/contrib/void/electron-main/se
 import { VoidSCMService } from '../../workbench/contrib/void/electron-main/voidSCMMainService.js';
 import { IVoidSCMService } from '../../workbench/contrib/void/common/voidSCMTypes.js';
 import { MCPChannel } from '../../workbench/contrib/void/electron-main/mcpChannel.js';
+import { EmbeddedBrowserService } from '../../platform/embeddedBrowser/electron-main/embeddedBrowserService.js';
+import { EmbeddedBrowserChannel } from '../../platform/embeddedBrowser/electron-main/embeddedBrowserChannel.js';
 /**
  * The main VS Code application. There will only ever be one instance,
  * even if the user starts many instances (e.g. from the command line).
@@ -1295,6 +1297,11 @@ export class CodeApplication extends Disposable {
 		// Void added this
 		const mcpChannel = new MCPChannel();
 		mainProcessElectronServer.registerChannel('void-channel-mcp', mcpChannel);
+
+		// Embedded Browser for agentic browser control
+		const embeddedBrowserService = new EmbeddedBrowserService(accessor.get(IWindowsMainService));
+		const embeddedBrowserChannel = new EmbeddedBrowserChannel(embeddedBrowserService);
+		mainProcessElectronServer.registerChannel('embeddedBrowser', embeddedBrowserChannel);
 
 		// Extension Host Debug Broadcasting
 		const electronExtensionHostDebugBroadcastChannel = new ElectronExtensionHostDebugBroadcastChannel(accessor.get(IWindowsMainService));
