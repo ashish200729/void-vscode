@@ -1884,18 +1884,27 @@ export abstract class Layout extends Disposable implements IWorkbenchLayoutServi
 		const focusedPart = [Parts.PANEL_PART, Parts.SIDEBAR_PART, Parts.AUXILIARYBAR_PART, Parts.CHATHISTORY_PART].find(part => this.hasFocus(part)) as SINGLE_WINDOW_PARTS | undefined;
 
 		if (sideBarPosition === Position.LEFT) {
+			// Editor mode (sidebar LEFT)
+			// Layout order: ActivityBar → SideBar → Editor → AuxiliaryBar → ChatHistory
 			this.workbenchGrid.moveViewTo(this.activityBarPartView, [2, 0]);
 			this.workbenchGrid.moveView(this.sideBarPartView, preMoveSideBarSize, sideBarSiblingToEditor ? this.editorPartView : this.activityBarPartView, sideBarSiblingToEditor ? Direction.Left : Direction.Right);
-			this.workbenchGrid.moveView(this.chatHistoryPartView, preMoveChatHistorySize, this.editorPartView, Direction.Left);
 
+			// Move AuxiliaryBar and ChatHistory to the right of Editor
+			// Always maintain order: Editor → AuxiliaryBar → ChatHistory
 			if (auxiliaryBarSiblingToEditor) {
+				// AuxiliaryBar is next to editor, place ChatHistory after it
 				this.workbenchGrid.moveView(this.auxiliaryBarPartView, preMoveAuxiliaryBarSize, this.editorPartView, Direction.Right);
+				this.workbenchGrid.moveView(this.chatHistoryPartView, preMoveChatHistorySize, this.auxiliaryBarPartView, Direction.Right);
 			} else {
-				this.workbenchGrid.moveViewTo(this.auxiliaryBarPartView, [2, -1]);
+				// AuxiliaryBar is at the end position, but ChatHistory should be after it
+				// Place AuxiliaryBar to the right of Editor first
+				this.workbenchGrid.moveView(this.auxiliaryBarPartView, preMoveAuxiliaryBarSize, this.editorPartView, Direction.Right);
+				// Then place ChatHistory to the right of AuxiliaryBar (rightmost)
+				this.workbenchGrid.moveView(this.chatHistoryPartView, preMoveChatHistorySize, this.auxiliaryBarPartView, Direction.Right);
 			}
 		} else {
 			// Agent mode (sidebar RIGHT)
-			// The correct layout order should be: ChatHistory → AuxiliaryBar → Editor → SideBar → ActivityBar
+			// Layout order: ChatHistory → AuxiliaryBar → Editor → SideBar → ActivityBar
 			this.workbenchGrid.moveViewTo(this.activityBarPartView, [2, -1]);
 			this.workbenchGrid.moveView(this.sideBarPartView, preMoveSideBarSize, sideBarSiblingToEditor ? this.editorPartView : this.activityBarPartView, sideBarSiblingToEditor ? Direction.Right : Direction.Left);
 
@@ -1920,17 +1929,16 @@ export abstract class Layout extends Disposable implements IWorkbenchLayoutServi
 				width: preMovePanelWidth as number
 			});
 		} else {
-			// For horizontal panel (top/bottom), also reposition it relative to the editor
+			// For horizontal panel (top/bottom), reposition it relative to the editor
 			// This ensures the panel is only within the editor area after sidebars have been moved
-			// In Agent mode (sidebar RIGHT), this is critical to keep the panel from spanning sidebars
-			if (sideBarPosition === Position.RIGHT) {
-				// Agent mode: Move panel to be directly below/above the editor
-				this.workbenchGrid.moveView(this.panelPartView, preMovePanelHeight, this.editorPartView, panelPosition === Position.BOTTOM ? Direction.Down : Direction.Up);
-				this.workbenchGrid.resizeView(this.panelPartView, {
-					height: preMovePanelHeight as number,
-					width: preMovePanelWidth as number
-				});
-			}
+			// Critical for both modes to keep the panel from spanning AuxiliaryBar/ChatHistory/Sidebar
+
+			// Move panel to be directly below/above the editor in BOTH modes
+			this.workbenchGrid.moveView(this.panelPartView, preMovePanelHeight, this.editorPartView, panelPosition === Position.BOTTOM ? Direction.Down : Direction.Up);
+			this.workbenchGrid.resizeView(this.panelPartView, {
+				height: preMovePanelHeight as number,
+				width: preMovePanelWidth as number
+			});
 		}
 
 		// Moving views in the grid can cause them to re-distribute sizing unnecessarily
@@ -2133,6 +2141,11 @@ export abstract class Layout extends Disposable implements IWorkbenchLayoutServi
 	}
 
 	private setChatHistoryHidden(hidden: boolean, skipLayout?: boolean): void {
+		// Check if already in the desired state to prevent recursion
+		if (this.stateModel.getRuntimeValue(LayoutStateKeys.CHATHISTORY_HIDDEN) === hidden) {
+			return;
+		}
+
 		this.stateModel.setRuntimeValue(LayoutStateKeys.CHATHISTORY_HIDDEN, hidden);
 
 		// Adjust CSS
@@ -2142,15 +2155,20 @@ export abstract class Layout extends Disposable implements IWorkbenchLayoutServi
 			this.mainContainer.classList.remove(LayoutClasses.CHATHISTORY_HIDDEN);
 		}
 
-		// Update the part's visibility state
+		// Propagate to grid (only if grid is initialized)
+		if (this.workbenchGrid) {
+			this.workbenchGrid.setViewVisible(this.chatHistoryPartView, !hidden);
+		}
+
+		// Update the part's visibility state AFTER grid update to avoid event cycles
 		const chatHistoryPart = this.getPart(Parts.CHATHISTORY_PART);
 		if (chatHistoryPart && 'setVisible' in chatHistoryPart) {
 			(chatHistoryPart as any).setVisible(!hidden);
 		}
 
-		// Propagate to grid (only if grid is initialized)
-		if (this.workbenchGrid) {
-			this.workbenchGrid.setViewVisible(this.chatHistoryPartView, !hidden);
+		// Layout
+		if (!skipLayout) {
+			this.layout();
 		}
 	}
 
@@ -2429,9 +2447,9 @@ export abstract class Layout extends Disposable implements IWorkbenchLayoutServi
 			}
 
 			if (sideBarPosition === Position.LEFT) {
-				result.push(nodes.auxiliaryBar);
-				// Insert chatHistory between sideBar and editor
-				result.splice(0, 0, nodes.chatHistory);
+				// Editor mode: ActivityBar → SideBar → Editor → AuxiliaryBar → ChatHistory
+				result.push(nodes.auxiliaryBar); // Add AuxiliaryBar to the right of editor
+				result.push(nodes.chatHistory); // Add ChatHistory to the right of AuxiliaryBar (rightmost)
 				result.splice(0, 0, nodes.sideBar);
 				result.splice(0, 0, nodes.activityBar);
 			} else {
@@ -2442,14 +2460,25 @@ export abstract class Layout extends Disposable implements IWorkbenchLayoutServi
 		} else {
 			const panelAlignment = this.stateModel.getRuntimeValue(LayoutStateKeys.PANEL_ALIGNMENT);
 
-			// In Agent mode (ChatHistory visible), force sidebars to be OUTSIDE the editor+panel branch
-			// This ensures the panel only spans the Editor area, not extending under sidebars
+			// Determine if sidebars should be next to editor based on mode and panel alignment
+			// In Editor mode (sidebar LEFT): Panel should only span Editor, not AuxiliaryBar/ChatHistory
+			// In Agent mode (sidebar RIGHT): Panel should only span Editor, not ChatHistory/AuxiliaryBar/Sidebar
 			const isChatHistoryVisible = !this.stateModel.getRuntimeValue(LayoutStateKeys.CHATHISTORY_HIDDEN);
 
-			// When ChatHistory is visible (Agent mode), always treat sidebars as NOT next to editor
-			// regardless of panel alignment, to keep the panel contained to just the editor area
-			const sideBarNextToEditor = isChatHistoryVisible ? false : !(panelAlignment === 'center' || (sideBarPosition === Position.LEFT && panelAlignment === 'right') || (sideBarPosition === Position.RIGHT && panelAlignment === 'left'));
-			const auxiliaryBarNextToEditor = isChatHistoryVisible ? false : !(panelAlignment === 'center' || (sideBarPosition === Position.RIGHT && panelAlignment === 'right') || (sideBarPosition === Position.LEFT && panelAlignment === 'left'));
+			let sideBarNextToEditor: boolean;
+			let auxiliaryBarNextToEditor: boolean;
+
+			if (sideBarPosition === Position.LEFT) {
+				// Editor mode: Panel should ONLY span the Editor area
+				// AuxiliaryBar and ChatHistory should ALWAYS be outside the editor+panel branch
+				sideBarNextToEditor = !(panelAlignment === 'center' || panelAlignment === 'right');
+				auxiliaryBarNextToEditor = false; // Always outside in Editor mode
+			} else {
+				// Agent mode: Panel should only span Editor area when ChatHistory is visible
+				// This keeps panel from extending under sidebars
+				sideBarNextToEditor = isChatHistoryVisible ? false : !(panelAlignment === 'center' || panelAlignment === 'left');
+				auxiliaryBarNextToEditor = isChatHistoryVisible ? false : !(panelAlignment === 'center' || panelAlignment === 'right');
+			}
 
 			const editorSectionWidth = availableWidth - activityBarSize - chatHistorySize - (sideBarNextToEditor ? 0 : sideBarSize) - (auxiliaryBarNextToEditor ? 0 : auxiliaryBarSize);
 
@@ -2467,27 +2496,31 @@ export abstract class Layout extends Disposable implements IWorkbenchLayoutServi
 
 			if (!auxiliaryBarNextToEditor) {
 				if (sideBarPosition === Position.RIGHT) {
+					// Agent mode: AuxiliaryBar on the left
 					result.splice(0, 0, nodes.auxiliaryBar);
 				} else {
+					// Editor mode: AuxiliaryBar on the right (but before ChatHistory)
 					result.push(nodes.auxiliaryBar);
 				}
 			}
 
 			if (!sideBarNextToEditor) {
 				if (sideBarPosition === Position.LEFT) {
-					// Insert chatHistory between sideBar and editor section
-					result.splice(0, 0, nodes.chatHistory);
+					// Editor mode: ActivityBar → SideBar → Editor section → AuxiliaryBar → ChatHistory
+					result.push(nodes.chatHistory); // Add ChatHistory at the very end (rightmost)
 					result.splice(0, 0, nodes.sideBar);
 				} else {
-					// Agent mode: ChatHistory (Left) ... Sidebar (Right)
+					// Agent mode: ChatHistory → AuxiliaryBar → Editor → Sidebar → ActivityBar
 					result.splice(0, 0, nodes.chatHistory);
 					result.push(nodes.sideBar);
 				}
 			} else {
-				// Even if sideBar is next to editor, chatHistory should be between sideBar and editor
+				// SideBar is next to editor
 				if (sideBarPosition === Position.LEFT) {
-					result.splice(0, 0, nodes.chatHistory);
+					// Editor mode: place ChatHistory at the end
+					result.push(nodes.chatHistory);
 				} else {
+					// Agent mode: place ChatHistory at the beginning
 					result.splice(0, 0, nodes.chatHistory);
 				}
 			}

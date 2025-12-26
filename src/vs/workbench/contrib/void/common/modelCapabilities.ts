@@ -125,7 +125,7 @@ export const defaultModelsOfProvider = {
 		'deepseek/deepseek-r1',
 		'deepseek/deepseek-r1-zero:free',
 		'mistralai/devstral-small:free',
-		'openai/gpt-5'
+		'openai/gpt-5',
 		// 'openrouter/quasar-alpha',
 		// 'google/gemini-2.5-pro-preview-03-25',
 		// 'mistralai/codestral-2501',

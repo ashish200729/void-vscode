@@ -855,14 +855,21 @@ export const ToolHeaderWrapper = ({
 
 	const isExpanded = isOpen !== undefined ? isOpen : isOpen_;
 	const isDropdown = children !== undefined;
-	const isClickable = !!(isDropdown || onClick);
 	const isDesc1Clickable = !!desc1OnClick;
 
+	// Build tooltip content if error exists
+	const errorTooltip = isError && desc1 ? String(desc1) : undefined;
+
 	const desc1HTML = <span
-		className={`text-void-fg-4 text-xs italic truncate ml-2
-			${isDesc1Clickable ? 'cursor-pointer hover:brightness-125 transition-all duration-150' : ''}
+		className={`text-void-fg-3 opacity-50 ml-1 truncate text-[12px]
+			${isDesc1Clickable ? 'cursor-pointer hover:opacity-80 transition-opacity duration-150' : ''}
 		`}
-		onClick={desc1OnClick}
+		onClick={(e) => {
+			if (desc1OnClick) {
+				e.stopPropagation();
+				desc1OnClick();
+			}
+		}}
 		{...desc1Info ? {
 			'data-tooltip-id': 'void-tooltip',
 			'data-tooltip-content': desc1Info,
@@ -877,90 +884,90 @@ export const ToolHeaderWrapper = ({
 		'data-tooltip-place': 'top' as const,
 	} : {};
 
-	return (<div className=''>
-		<div className={`w-full border border-void-border-3 rounded px-2 py-1 bg-void-bg-3 overflow-hidden ${className}`}>
-			{/* header */}
-			<div className={`select-none flex items-center min-h-[24px]`}>
-				<div className={`flex items-center w-full gap-x-2 overflow-hidden justify-between ${isRejected ? 'line-through' : ''}`}>
-					{/* left */}
-					<div // container for if desc1 is clickable
-						className='ml-1 flex items-center overflow-hidden'
+	return (<div className='flex flex-col'>
+		<div
+			className={`
+				flex flex-row items-center gap-1
+				full-width box-border overflow-hidden
+				${isDropdown || onClick ? 'cursor-pointer' : ''}
+				select-none
+				${isRejected ? 'line-through opacity-70' : ''}
+				${className || ''}
+			`}
+			onClick={() => {
+				if (isDropdown) { setIsOpen(v => !v); }
+				if (onClick) { onClick(); }
+			}}
+		>
+			<div className='flex gap-1 overflow-hidden min-w-0 flex-[0_1_auto]'>
+				<div className={`
+					flex items-center gap-1 overflow-hidden min-w-0
+					text-void-fg-3 text-[12px]
+					transition-opacity duration-100 ease-in
+					${isRejected ? 'line-through opacity-70' : ''}
+				`}>
+					<span
+						className="flex-shrink-0 text-void-fg-3 opacity-70 whitespace-nowrap overflow-hidden text-ellipsis"
+						data-tooltip-id='void-tooltip'
+						{...(errorTooltip && {
+							'data-tooltip-content': errorTooltip,
+							'data-tooltip-place': 'top',
+						})}
 					>
-						{/* title eg "> Edited File" */}
-						<div className={`
-							flex items-center min-w-0 overflow-hidden grow
-							${isClickable ? 'cursor-pointer hover:brightness-125 transition-all duration-150' : ''}
-						`}
-							onClick={() => {
-								if (isDropdown) { setIsOpen(v => !v); }
-								if (onClick) { onClick(); }
-							}}
-						>
-							{isDropdown && (<ChevronRight
-								className={`
-								text-void-fg-3 mr-0.5 h-4 w-4 flex-shrink-0 transition-transform duration-100 ease-[cubic-bezier(0.4,0,0.2,1)]
-								${isExpanded ? 'rotate-90' : ''}
-							`}
-							/>)}
-
-							{icon && <span
-								className="flex h-4 w-4 items-center justify-center text-void-fg-4 leading-none flex-shrink-0 mr-1"
-								{...iconTooltipProps}
-							>{icon}</span>}
-
-							<span className="text-void-fg-3 flex-shrink-0 leading-none">{title}</span>
-
-							{!isDesc1Clickable && desc1HTML}
-						</div>
-						{isDesc1Clickable && desc1HTML}
-					</div>
-
-					{/* right */}
-					<div className="flex items-center gap-x-2 flex-shrink-0">
-
-						{info && <CircleEllipsis
-							className='ml-2 text-void-fg-4 opacity-60 flex-shrink-0'
-							size={14}
-							data-tooltip-id='void-tooltip'
-							data-tooltip-content={info}
-							data-tooltip-place='top-end'
-						/>}
-
-						{isError && <AlertTriangle
-							className='text-void-warning opacity-90 flex-shrink-0'
-							size={14}
-							data-tooltip-id='void-tooltip'
-							data-tooltip-content={'Error running tool'}
-							data-tooltip-place='top'
-						/>}
-						{isRejected && <Ban
-							className='text-void-fg-4 opacity-90 flex-shrink-0'
-							size={14}
-							data-tooltip-id='void-tooltip'
-							data-tooltip-content={'Canceled'}
-							data-tooltip-place='top'
-						/>}
-						{desc2 && <span className="text-void-fg-4 text-xs" onClick={desc2OnClick}>
-							{desc2}
-						</span>}
-						{numResults !== undefined && (
-							<span className="text-void-fg-4 text-xs ml-auto mr-1">
-								{`${numResults}${hasNextPage ? '+' : ''} result${numResults !== 1 ? 's' : ''}`}
-							</span>
-						)}
-					</div>
+						{title}
+					</span>
+					{desc1 && !isError && desc1HTML}
 				</div>
 			</div>
-			{/* children */}
-			{<div
-				className={`overflow-hidden transition-all duration-200 ease-in-out ${isExpanded ? 'opacity-100 py-1' : 'max-h-0 opacity-0'}
-					text-void-fg-4 rounded-sm overflow-x-auto
-				  `}
-			//    bg-black bg-opacity-10 border border-void-border-4 border-opacity-50
-			>
-				{children}
-			</div>}
+
+			{/* Right side items */}
+			{(info || isError || isRejected || desc2 || numResults !== undefined) && (
+				<div className="flex items-center gap-x-1.5 flex-shrink-0 ml-auto">
+					{info && <CircleEllipsis
+						className='text-void-fg-4 opacity-50 flex-shrink-0'
+						size={11}
+						data-tooltip-id='void-tooltip'
+						data-tooltip-content={info}
+						data-tooltip-place='top-end'
+					/>}
+
+					{isError && <AlertTriangle
+						className='text-void-warning opacity-80 flex-shrink-0'
+						size={11}
+						data-tooltip-id='void-tooltip'
+						data-tooltip-content={errorTooltip || 'Error running tool'}
+						data-tooltip-place='top'
+					/>}
+					{isRejected && <Ban
+						className='text-void-fg-4 opacity-70 flex-shrink-0'
+						size={11}
+						data-tooltip-id='void-tooltip'
+						data-tooltip-content={'Canceled'}
+						data-tooltip-place='top'
+					/>}
+					{desc2 && <span className="text-void-fg-4 opacity-60 text-[11px]" onClick={(e) => { e.stopPropagation(); desc2OnClick?.(); }}>
+						{desc2}
+					</span>}
+					{numResults !== undefined && (
+						<span className="text-void-fg-4 opacity-60 text-[11px] ml-auto">
+							{`${numResults}${hasNextPage ? '+' : ''} result${numResults !== 1 ? 's' : ''}`}
+						</span>
+					)}
+				</div>
+			)}
 		</div>
+
+		{/* children */}
+		<div
+			className={`
+				overflow-hidden transition-all duration-200 ease-in-out
+				${isExpanded ? 'opacity-100 max-h-[300px]' : 'max-h-0 opacity-0'}
+				pl-0
+			`}
+		>
+			{children}
+		</div>
+
 		{bottomChildren}
 	</div>);
 };
@@ -1054,13 +1061,8 @@ const EditTool = ({ toolMessage, threadId, messageIdx, content }: Parameters<Res
 		}
 		// Handle tool errors
 		else if (toolMessage.type === 'tool_error') {
-			componentParams.bottomChildren = (
-				<BottomChildren title='Error'>
-					<CodeChildren>
-						{toolMessage.result}
-					</CodeChildren>
-				</BottomChildren>
-			)
+			componentParams.desc1 = typeof toolMessage.result === 'string' ? toolMessage.result : String(toolMessage.result)
+			componentParams.isError = true
 		}
 	}
 
@@ -1726,7 +1728,7 @@ const ReasoningWrapper = ({
 };
 
 
-// should either be past or "-ing" tense, not present tense. Eg. when the LLM searches for something, the user expects it to say "I searched for X" or "I am searching for X". Not "I search X".
+// Clean, short tool names with shimmer effect for streaming state
 
 const loadingTitleWrapper = (item: React.ReactNode): React.ReactNode => {
 	// Only apply shimmer if item is a string
@@ -1745,23 +1747,23 @@ const loadingTitleWrapper = (item: React.ReactNode): React.ReactNode => {
 }
 
 const titleOfBuiltinToolName = {
-	'read_file': { done: 'Read file', proposed: 'Read file', running: loadingTitleWrapper('Reading file') },
-	'ls_dir': { done: 'Inspected folder', proposed: 'Inspect folder', running: loadingTitleWrapper('Inspecting folder') },
-	'get_dir_tree': { done: 'Inspected folder tree', proposed: 'Inspect folder tree', running: loadingTitleWrapper('Inspecting folder tree') },
-	'search_pathnames_only': { done: 'Searched by file name', proposed: 'Search by file name', running: loadingTitleWrapper('Searching by file name') },
-	'search_for_files': { done: 'Searched', proposed: 'Search', running: loadingTitleWrapper('Searching') },
-	'create_file_or_folder': { done: `Created`, proposed: `Create`, running: loadingTitleWrapper(`Creating`) },
-	'delete_file_or_folder': { done: `Deleted`, proposed: `Delete`, running: loadingTitleWrapper(`Deleting`) },
-	'edit_file': { done: `Edited file`, proposed: 'Edit file', running: loadingTitleWrapper('Editing file') },
-	'rewrite_file': { done: `Wrote file`, proposed: 'Write file', running: loadingTitleWrapper('Writing file') },
-	'run_command': { done: `Ran terminal`, proposed: 'Run terminal', running: loadingTitleWrapper('Running terminal') },
-	'run_persistent_command': { done: `Ran terminal`, proposed: 'Run terminal', running: loadingTitleWrapper('Running terminal') },
+	'read_file': { done: 'Read', proposed: 'Read', running: loadingTitleWrapper('Read') },
+	'ls_dir': { done: 'Listed', proposed: 'List', running: loadingTitleWrapper('Listed') },
+	'get_dir_tree': { done: 'Listed tree', proposed: 'List tree', running: loadingTitleWrapper('Listed tree') },
+	'search_pathnames_only': { done: 'Searched filenames', proposed: 'Search filenames', running: loadingTitleWrapper('Searched filenames') },
+	'search_for_files': { done: 'Searched', proposed: 'Search', running: loadingTitleWrapper('Searched') },
+	'create_file_or_folder': { done: 'Created', proposed: 'Create', running: loadingTitleWrapper('Created') },
+	'delete_file_or_folder': { done: 'Deleted', proposed: 'Delete', running: loadingTitleWrapper('Deleted') },
+	'edit_file': { done: 'Edited', proposed: 'Edit', running: loadingTitleWrapper('Edited') },
+	'rewrite_file': { done: 'Rewrote', proposed: 'Rewrite', running: loadingTitleWrapper('Rewrote') },
+	'run_command': { done: 'Ran', proposed: 'Run', running: loadingTitleWrapper('Ran') },
+	'run_persistent_command': { done: 'Ran', proposed: 'Run', running: loadingTitleWrapper('Ran') },
 
-	'open_persistent_terminal': { done: `Opened terminal`, proposed: 'Open terminal', running: loadingTitleWrapper('Opening terminal') },
-	'kill_persistent_terminal': { done: `Killed terminal`, proposed: 'Kill terminal', running: loadingTitleWrapper('Killing terminal') },
+	'open_persistent_terminal': { done: 'Opened', proposed: 'Open', running: loadingTitleWrapper('Opened') },
+	'kill_persistent_terminal': { done: 'Killed', proposed: 'Kill', running: loadingTitleWrapper('Killed') },
 
-	'read_lint_errors': { done: `Read lint errors`, proposed: 'Read lint errors', running: loadingTitleWrapper('Reading lint errors') },
-	'search_in_file': { done: 'Searched in file', proposed: 'Search in file', running: loadingTitleWrapper('Searching in file') },
+	'read_lint_errors': { done: 'Read errors', proposed: 'Read errors', running: loadingTitleWrapper('Read errors') },
+	'search_in_file': { done: 'Searched file', proposed: 'Search in file', running: loadingTitleWrapper('Searched file') },
 
 } as const satisfies Record<BuiltinToolName, { done: any, proposed: any, running: any }>
 
@@ -1806,18 +1808,17 @@ const getToolStatusIconMeta = (toolMessage: Pick<ChatMessage & { role: 'tool' },
 const getTitle = (toolMessage: Pick<ChatMessage & { role: 'tool' }, 'name' | 'type' | 'mcpServerName'>): React.ReactNode => {
 	const t = toolMessage
 
-	// non-built-in title
+	// non-built-in title (MCP tools)
 	if (!builtinToolNames.includes(t.name as BuiltinToolName)) {
-		// descriptor of Running or Ran etc
+		// Clean, short descriptor with shimmer for streaming
 		const descriptor =
 			t.type === 'success' ? 'Called'
-				: t.type === 'running_now' ? 'Calling'
+				: t.type === 'running_now' ? 'Called'
 					: t.type === 'tool_request' ? 'Call'
 						: t.type === 'rejected' ? 'Call'
 							: t.type === 'invalid_params' ? 'Call'
 								: t.type === 'tool_error' ? 'Call'
 									: 'Call'
-
 
 		const title = `${descriptor} ${toolMessage.mcpServerName || 'MCP'}`
 		if (t.type === 'running_now' || t.type === 'tool_request')
@@ -2263,8 +2264,8 @@ export const EditToolCardWrapper = ({ children, isRunning }: { children: React.R
 );
 
 export const ToolChildrenWrapper = ({ children, className }: { children: React.ReactNode, className?: string }) => {
-	return <div className={`${className ? className : ''} cursor-default select-none`}>
-		<div className='px-2 min-w-full overflow-hidden'>
+	return <div className={`${className ? className : ''} cursor-default select-none overflow-y-auto max-h-[300px]`}>
+		<div className='px-2 min-w-full'>
 			{children}
 		</div>
 	</div>
@@ -2492,11 +2493,8 @@ const CommandTool = ({ toolMessage, type, threadId }: { threadId: string } & ({
 	}
 	else if (toolMessage.type === 'tool_error') {
 		const { result } = toolMessage
-		componentParams.bottomChildren = <BottomChildren title='Error'>
-			<CodeChildren>
-				{result}
-			</CodeChildren>
-		</BottomChildren>
+		componentParams.desc1 = typeof result === 'string' ? result : String(result)
+		componentParams.isError = true
 	}
 	else if (toolMessage.type === 'running_now') {
 		if (type === 'run_command')
@@ -2580,13 +2578,8 @@ const MCPToolWrapper = ({ toolMessage }: WrapperProps<string>) => {
 	}
 	else if (toolMessage.type === 'tool_error') {
 		const { result } = toolMessage
-		componentParams.bottomChildren = (
-			<BottomChildren title='Error'>
-				<CodeChildren>
-					{result}
-				</CodeChildren>
-			</BottomChildren>
-		)
+		componentParams.desc1 = typeof result === 'string' ? result : String(result)
+		componentParams.isError = true
 	}
 	else if (toolMessage.type === 'running_now') {
 		// Show loading state - icon already shows spinner
@@ -2644,12 +2637,8 @@ const builtinToolNameToComponent: { [T in BuiltinToolName]: { resultWrapper: Res
 			}
 			else if (toolMessage.type === 'tool_error') {
 				const { result } = toolMessage
-				// JumpToFileButton removed in favor of FileLinkText
-				componentParams.bottomChildren = <BottomChildren title='Error'>
-					<CodeChildren>
-						{result}
-					</CodeChildren>
-				</BottomChildren>
+				componentParams.desc1 = typeof result === 'string' ? result : String(result)
+				componentParams.isError = true
 			}
 			else if (toolMessage.type === 'running_now') {
 				// Show loading state - no additional children needed, icon already shows spinner
@@ -2702,11 +2691,8 @@ const builtinToolNameToComponent: { [T in BuiltinToolName]: { resultWrapper: Res
 			}
 			else if (toolMessage.type === 'tool_error') {
 				const { result } = toolMessage
-				componentParams.bottomChildren = <BottomChildren title='Error'>
-					<CodeChildren>
-						{result}
-					</CodeChildren>
-				</BottomChildren>
+				componentParams.desc1 = typeof result === 'string' ? result : String(result)
+				componentParams.isError = true
 			}
 			else if (toolMessage.type === 'running_now') {
 				// Show loading state - no additional children needed, icon already shows spinner
@@ -2767,11 +2753,8 @@ const builtinToolNameToComponent: { [T in BuiltinToolName]: { resultWrapper: Res
 			}
 			else if (toolMessage.type === 'tool_error') {
 				const { result } = toolMessage
-				componentParams.bottomChildren = <BottomChildren title='Error'>
-					<CodeChildren>
-						{result}
-					</CodeChildren>
-				</BottomChildren>
+				componentParams.desc1 = typeof result === 'string' ? result : String(result)
+				componentParams.isError = true
 			}
 			else if (toolMessage.type === 'running_now') {
 				// Show loading state - no additional children needed, icon already shows spinner
@@ -2826,11 +2809,8 @@ const builtinToolNameToComponent: { [T in BuiltinToolName]: { resultWrapper: Res
 			}
 			else if (toolMessage.type === 'tool_error') {
 				const { result } = toolMessage
-				componentParams.bottomChildren = <BottomChildren title='Error'>
-					<CodeChildren>
-						{result}
-					</CodeChildren>
-				</BottomChildren>
+				componentParams.desc1 = typeof result === 'string' ? result : String(result)
+				componentParams.isError = true
 			}
 			else if (toolMessage.type === 'running_now') {
 				// Show loading state - no additional children needed, icon already shows spinner
@@ -2891,11 +2871,8 @@ const builtinToolNameToComponent: { [T in BuiltinToolName]: { resultWrapper: Res
 			}
 			else if (toolMessage.type === 'tool_error') {
 				const { result } = toolMessage
-				componentParams.bottomChildren = <BottomChildren title='Error'>
-					<CodeChildren>
-						{result}
-					</CodeChildren>
-				</BottomChildren>
+				componentParams.desc1 = typeof result === 'string' ? result : String(result)
+				componentParams.isError = true
 			}
 			else if (toolMessage.type === 'running_now') {
 				// Show loading state - no additional children needed, icon already shows spinner
@@ -2947,11 +2924,8 @@ const builtinToolNameToComponent: { [T in BuiltinToolName]: { resultWrapper: Res
 			}
 			else if (toolMessage.type === 'tool_error') {
 				const { result } = toolMessage;
-				componentParams.bottomChildren = <BottomChildren title='Error'>
-					<CodeChildren>
-						{result}
-					</CodeChildren>
-				</BottomChildren>
+				componentParams.desc1 = typeof result === 'string' ? result : String(result)
+				componentParams.isError = true
 			}
 			else if (toolMessage.type === 'running_now') {
 				// Show loading state - no additional children needed, icon already shows spinner
@@ -3000,12 +2974,8 @@ const builtinToolNameToComponent: { [T in BuiltinToolName]: { resultWrapper: Res
 			}
 			else if (toolMessage.type === 'tool_error') {
 				const { result } = toolMessage
-				// JumpToFileButton removed in favor of FileLinkText
-				componentParams.bottomChildren = <BottomChildren title='Error'>
-					<CodeChildren>
-						{result}
-					</CodeChildren>
-				</BottomChildren>
+				componentParams.desc1 = typeof result === 'string' ? result : String(result)
+				componentParams.isError = true
 			}
 			else if (toolMessage.type === 'running_now') {
 				// Show loading state - no additional children needed, icon already shows spinner
@@ -3054,11 +3024,8 @@ const builtinToolNameToComponent: { [T in BuiltinToolName]: { resultWrapper: Res
 			else if (toolMessage.type === 'tool_error') {
 				const { result } = toolMessage
 				if (params) { componentParams.onClick = () => { voidOpenFileFn(params.uri, accessor) } }
-				componentParams.bottomChildren = <BottomChildren title='Error'>
-					<CodeChildren>
-						{result}
-					</CodeChildren>
-				</BottomChildren>
+				componentParams.desc1 = typeof result === 'string' ? result : String(result)
+				componentParams.isError = true
 			}
 			else if (toolMessage.type === 'running_now') {
 				// nothing more is needed
@@ -3105,11 +3072,8 @@ const builtinToolNameToComponent: { [T in BuiltinToolName]: { resultWrapper: Res
 			else if (toolMessage.type === 'tool_error') {
 				const { result } = toolMessage
 				if (params) { componentParams.onClick = () => { voidOpenFileFn(params.uri, accessor) } }
-				componentParams.bottomChildren = <BottomChildren title='Error'>
-					<CodeChildren>
-						{result}
-					</CodeChildren>
-				</BottomChildren>
+				componentParams.desc1 = typeof result === 'string' ? result : String(result)
+				componentParams.isError = true
 			}
 			else if (toolMessage.type === 'running_now') {
 				const { result } = toolMessage
@@ -3178,11 +3142,8 @@ const builtinToolNameToComponent: { [T in BuiltinToolName]: { resultWrapper: Res
 			}
 			else if (toolMessage.type === 'tool_error') {
 				const { result } = toolMessage
-				componentParams.bottomChildren = <BottomChildren title='Error'>
-					<CodeChildren>
-						{result}
-					</CodeChildren>
-				</BottomChildren>
+				componentParams.desc1 = typeof result === 'string' ? result : String(result)
+				componentParams.isError = true
 			}
 			else if (toolMessage.type === 'running_now') {
 				// Show loading state - no additional children needed, icon already shows spinner
@@ -3223,11 +3184,8 @@ const builtinToolNameToComponent: { [T in BuiltinToolName]: { resultWrapper: Res
 			}
 			else if (toolMessage.type === 'tool_error') {
 				const { result } = toolMessage
-				componentParams.bottomChildren = <BottomChildren title='Error'>
-					<CodeChildren>
-						{result}
-					</CodeChildren>
-				</BottomChildren>
+				componentParams.desc1 = typeof result === 'string' ? result : String(result)
+				componentParams.isError = true
 			}
 			else if (toolMessage.type === 'running_now') {
 				// Show loading state - no additional children needed, icon already shows spinner
@@ -3345,7 +3303,7 @@ const _ChatBubble = ({ threadId, chatMessage, currCheckpointIdx, isCommitted, me
 	else if (role === 'tool') {
 		// Handle invalid params case first
 		if (chatMessage.type === 'invalid_params') {
-			return <div className={`my-0.25 ${isCheckpointGhost ? 'opacity-50' : ''}`}>
+			return <div className={`${isCheckpointGhost ? 'opacity-50' : ''}`}>
 				<InvalidTool toolName={chatMessage.name} message={chatMessage.content} mcpServerName={chatMessage.mcpServerName} />
 			</div>
 		}
@@ -3370,7 +3328,7 @@ const _ChatBubble = ({ threadId, chatMessage, currCheckpointIdx, isCommitted, me
 		}
 
 		return (
-			<div className={`transition-opacity duration-300 ease-in-out my-0.25 ${isCheckpointGhost ? 'opacity-50' : 'opacity-100'}`}>
+			<div className={`transition-opacity duration-300 ease-in-out ${isCheckpointGhost ? 'opacity-50' : 'opacity-100'}`}>
 				<ErrorBoundary>
 					{chatMessage.type === 'tool_request'
 						? <PendingToolRequest toolMessage={chatMessage} threadId={threadId} />
@@ -3386,7 +3344,7 @@ const _ChatBubble = ({ threadId, chatMessage, currCheckpointIdx, isCommitted, me
 	}
 
 	else if (role === 'interrupted_streaming_tool') {
-		return <div className={`my-0.25 ${isCheckpointGhost ? 'opacity-50' : ''}`}>
+		return <div className={`${isCheckpointGhost ? 'opacity-50' : ''}`}>
 			<CanceledTool toolName={chatMessage.name} mcpServerName={chatMessage.mcpServerName} />
 		</div>
 	}
@@ -3420,30 +3378,152 @@ const ParallelToolGroup = ({
 	isRunning,
 	scrollContainerRef,
 }: ParallelToolGroupProps) => {
-	return (
-		<>
-			{messages.map(({ index }) => {
-				const previousMessage = index > 0 ? previousMessages[index - 1] : null
-				const previousRole = previousMessage?.role
-				const currentRole = previousMessages[index]?.role
-				const addGap = (previousRole === 'user' && currentRole === 'assistant') ||
-					(previousRole === 'assistant' && currentRole === 'user')
+	const [isExpanded, setIsExpanded] = useState(true);
 
-				return (
-					<div key={`tool-${index}`} className={addGap ? 'mt-2' : 'mt-1'}>
-						<ChatBubble
-							currCheckpointIdx={currCheckpointIdx}
-							chatMessage={previousMessages[index]}
-							messageIdx={index}
-							isCommitted={true}
-							chatIsRunning={isRunning}
-							threadId={threadId}
-							_scrollToBottom={() => scrollToBottom(scrollContainerRef)}
-						/>
-					</div>
-				)
-			})}
-		</>
+	// Check if all tools in the group are completed (success, error, rejected, or invalid - not running)
+	const allToolsCompleted = messages.every(({ index }) => {
+		const msg = previousMessages[index];
+		if (msg.role !== 'tool') return false;
+		// Tool is completed if it's success, error, rejected, or invalid_params (not running_now or tool_request)
+		return msg.type === 'success' || msg.type === 'tool_error' || msg.type === 'rejected' || msg.type === 'invalid_params';
+	});
+
+	// Check if any tools have errors or invalid params
+	const hasErrors = messages.some(({ index }) => {
+		const msg = previousMessages[index];
+		return msg.role === 'tool' && (msg.type === 'tool_error' || msg.type === 'invalid_params');
+	});
+
+	// Count successful vs failed tools
+	const toolStats = messages.reduce((acc, { index }) => {
+		const msg = previousMessages[index];
+		if (msg.role === 'tool') {
+			if (msg.type === 'success') acc.success++;
+			else if (msg.type === 'tool_error') acc.error++;
+			else if (msg.type === 'rejected') acc.rejected++;
+			else if (msg.type === 'invalid_params') acc.invalid++;
+		}
+		return acc;
+	}, { success: 0, error: 0, rejected: 0, invalid: 0 });
+
+	// Auto-collapse when all tools complete
+	useEffect(() => {
+		if (allToolsCompleted) {
+			setIsExpanded(false);
+		}
+	}, [allToolsCompleted]);
+
+	// Generate smart summary by grouping tool types
+	const generateSummary = (): string => {
+		const toolCounts: Record<string, number> = {};
+
+		// Only count successful tools for the main summary
+		messages.forEach(({ index }) => {
+			const msg = previousMessages[index];
+			if (msg.role === 'tool' && msg.type === 'success') {
+				const toolName = (msg as any).name;
+				toolCounts[toolName] = (toolCounts[toolName] || 0) + 1;
+			}
+		});
+
+		// Map tool names to readable summaries
+		const summaryParts: string[] = [];
+
+		const toolNameMap: Record<string, (count: number) => string> = {
+			'read_file': (count) => `Read ${count} file${count !== 1 ? 's' : ''}`,
+			'ls_dir': (count) => `Listed ${count} folder${count !== 1 ? 's' : ''}`,
+			'get_dir_tree': (count) => `Listed ${count} tree${count !== 1 ? 's' : ''}`,
+			'search_pathnames_only': (count) => `Searched filenames ${count} time${count !== 1 ? 's' : ''}`,
+			'search_for_files': (count) => `Searched ${count} time${count !== 1 ? 's' : ''}`,
+			'search_in_file': (count) => `Searched in ${count} file${count !== 1 ? 's' : ''}`,
+			'create_file_or_folder': (count) => `Created ${count} item${count !== 1 ? 's' : ''}`,
+			'delete_file_or_folder': (count) => `Deleted ${count} item${count !== 1 ? 's' : ''}`,
+			'edit_file': (count) => `Edited ${count} file${count !== 1 ? 's' : ''}`,
+			'rewrite_file': (count) => `Rewrote ${count} file${count !== 1 ? 's' : ''}`,
+			'run_command': (count) => `Ran ${count} command${count !== 1 ? 's' : ''}`,
+			'run_persistent_command': (count) => `Ran ${count} command${count !== 1 ? 's' : ''}`,
+			'read_lint_errors': (count) => `Read errors from ${count} file${count !== 1 ? 's' : ''}`,
+		};
+
+		Object.entries(toolCounts).forEach(([toolName, count]) => {
+			if (toolNameMap[toolName]) {
+				summaryParts.push(toolNameMap[toolName](count));
+			} else {
+				// For MCP or unknown tools
+				summaryParts.push(`${toolName} (${count})`);
+			}
+		});
+
+		let summary = summaryParts.length > 0 ? summaryParts.join(', ') : `${messages.length} tool${messages.length !== 1 ? 's' : ''}`;
+
+		// Add error/rejected/invalid info if present
+		const statusParts: string[] = [];
+		if (toolStats.error > 0) {
+			statusParts.push(`${toolStats.error} failed`);
+		}
+		if (toolStats.rejected > 0) {
+			statusParts.push(`${toolStats.rejected} canceled`);
+		}
+		if (toolStats.invalid > 0) {
+			statusParts.push(`${toolStats.invalid} invalid`);
+		}
+
+		if (statusParts.length > 0) {
+			summary += ` (${statusParts.join(', ')})`;
+		}
+
+		return summary;
+	};
+
+	const summary = allToolsCompleted ? generateSummary() : '';
+
+	return (
+		<div className="flex flex-col">
+		{/* Collapsible header - only show when completed */}
+		{allToolsCompleted && (
+			<div
+				className={`flex items-center justify-between gap-1.5 text-[13px] font-medium cursor-pointer select-none opacity-80 hover:opacity-100 transition-opacity py-0.5 ${hasErrors ? 'text-void-warning' : 'text-void-fg-3'}`}
+				onClick={() => setIsExpanded(!isExpanded)}
+				data-tooltip-id='void-tooltip'
+				data-tooltip-content={`${toolStats.success} succeeded${toolStats.error > 0 ? `, ${toolStats.error} failed` : ''}${toolStats.rejected > 0 ? `, ${toolStats.rejected} canceled` : ''}${toolStats.invalid > 0 ? `, ${toolStats.invalid} invalid` : ''}`}
+				data-tooltip-place='top'
+			>
+				<span className="truncate flex items-center gap-1.5">
+					{hasErrors && <AlertTriangle size={12} className="flex-shrink-0" />}
+					{summary}
+				</span>
+				<ChevronRight
+					className={`flex-shrink-0 transition-transform duration-200 ${isExpanded ? 'rotate-90' : ''}`}
+					size={13}
+				/>
+			</div>
+		)}
+
+			{/* Tool list */}
+			<div className={`flex flex-col ${allToolsCompleted && !isExpanded ? 'hidden' : ''}`}>
+				{messages.map(({ index }) => {
+					const previousMessage = index > 0 ? previousMessages[index - 1] : null
+					const previousRole = previousMessage?.role
+					const currentRole = previousMessages[index]?.role
+					const addGap = (previousRole === 'user' && currentRole === 'assistant') ||
+						(previousRole === 'assistant' && currentRole === 'user')
+
+					return (
+						<div key={`tool-${index}`} className={addGap ? 'mt-2' : ''}>
+							<ChatBubble
+								currCheckpointIdx={currCheckpointIdx}
+								chatMessage={previousMessages[index]}
+								messageIdx={index}
+								isCommitted={true}
+								chatIsRunning={isRunning}
+								threadId={threadId}
+								_scrollToBottom={() => scrollToBottom(scrollContainerRef)}
+							/>
+						</div>
+					)
+				})}
+			</div>
+		</div>
 	)
 }
 
@@ -3739,16 +3819,8 @@ const StreamingTool = ({ toolCallSoFar }: { toolCallSoFar: RawToolCallObj }) => 
 	const uriDone = toolCallSoFar.doneParams?.includes('uri') ?? false
 	const uriStr = toolCallSoFar.rawParams['uri'] as string | undefined
 
-	// If it's a file-related tool and we have a URI, just show the filename as the title immediately
-	// This makes it feel faster/more responsive than 'Reading file...' -> 'filename'
-	if (uriStr && (toolName === 'read_file' || toolName === 'edit_file' || toolName === 'rewrite_file' || toolName === 'search_in_file')) {
-		const basename = getBasename(uriStr)
-		if (toolName === 'read_file') title = `Reading file (${basename})`
-		else if (toolName === 'edit_file' || toolName === 'rewrite_file') title = `Editing file (${basename})`
-		else if (toolName === 'search_in_file') title = `Searching in file (${basename})`
-		else title = basename
-	}
-
+	// Keep title as action label only (no filename) - filename will be shown in desc1
+	// This matches the normal tool rendering pattern where title is the action and desc1 is the target
 	const desc1 = uriDone && uriStr ? getBasename(uriStr) : (uriStr ? getBasename(uriStr) : '...')
 
 	const desc1OnClick = uri ? () => voidOpenFileFn(uri, accessor) : undefined
@@ -3999,7 +4071,7 @@ export const SidebarChat = () => {
 					(previousRole === 'assistant' && currentRole === 'user')
 
 				return (
-					<div key={`single-${i}`} className={shouldAddGap ? 'mt-2' : 'mt-1'}>
+					<div key={`single-${i}`} className={shouldAddGap ? 'mt-2' : ''}>
 						<ChatBubble
 							currCheckpointIdx={currCheckpointIdx}
 							chatMessage={group.message}
@@ -4033,7 +4105,7 @@ export const SidebarChat = () => {
 	const shouldAddGapForStreaming = lastMessage?.role === 'user'
 
 	const currStreamingMessageHTML = reasoningSoFar || displayContentSoFar || isRunning ?
-		<div className={shouldAddGapForStreaming ? 'mt-2' : 'mt-1'}>
+		<div className={shouldAddGapForStreaming ? 'mt-2' : ''}>
 			<ChatBubble
 				key={'curr-streaming-msg'}
 				currCheckpointIdx={currCheckpointIdx}

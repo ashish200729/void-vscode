@@ -466,16 +466,12 @@ export class BrowserTitlebarPart extends Part implements ITitlebarPart {
 			// Set the context key immediately at startup to match the toggle state
 			agentEditorModeContextKey.set(initialMode);
 
-			// Set initial chat history visibility based on mode
-			// Note: ChatHistoryPart is instantiated via accessor.get(IChatHistoryService) in layout.ts
-			// before this code runs, so the part should be available
-			if (initialMode === 'agents') {
-				this.layoutService.setPartHidden(false, Parts.CHATHISTORY_PART);
-				// Ensure panel alignment is 'center' so the terminal only spans the Editor area
-				this.layoutService.setPanelAlignment('center');
-			} else {
-				this.layoutService.setPartHidden(true, Parts.CHATHISTORY_PART);
-			}
+			// Show chat history by default in both modes
+			this.layoutService.setPartHidden(false, Parts.CHATHISTORY_PART);
+
+			// Set panel alignment to 'center' for both modes
+			// This ensures the terminal only spans the Editor area, not the sidebars
+			this.layoutService.setPanelAlignment('center');
 
 			this._register(this.agentEditorToggle.onDidChangeMode(mode => {
 				// Update sidebar position
@@ -485,15 +481,9 @@ export class BrowserTitlebarPart extends Part implements ITitlebarPart {
 				// Update Agent/Editor mode context key for menu visibility
 				agentEditorModeContextKey.set(mode);
 
-				// Show/hide chat history based on mode
-				// Agent mode → show chat history, Editor mode → hide chat history
-				if (mode === 'agents') {
-					this.layoutService.setPartHidden(false, Parts.CHATHISTORY_PART);
-					// Ensure panel alignment is 'center' so the terminal only spans the Editor area
-					this.layoutService.setPanelAlignment('center');
-				} else {
-					this.layoutService.setPartHidden(true, Parts.CHATHISTORY_PART);
-				}
+				// Set panel alignment to 'center' for both modes
+				// This ensures the terminal only spans the Editor area, not the sidebars
+				this.layoutService.setPanelAlignment('center');
 			}));
 		}
 

@@ -13,6 +13,12 @@
 	flex-direction: column;
 	background-color: var(--vscode-sideBar-background);
 	color: var(--vscode-sideBar-foreground);
+	border-left-width: 1px;
+	border-left-style: solid;
+	border-left-color: var(--vscode-sideBar-border);
+	border-right-width: 1px;
+	border-right-style: solid;
+	border-right-color: var(--vscode-sideBar-border);
 }
 
 .monaco-workbench .part.chathistory > .content {
