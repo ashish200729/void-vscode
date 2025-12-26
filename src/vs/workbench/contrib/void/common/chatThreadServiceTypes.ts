@@ -4,9 +4,19 @@
  *--------------------------------------------------------------------------------------*/
 
 import { URI } from '../../../../base/common/uri.js';
+import { generateUuid } from '../../../../base/common/uuid.js';
 import { VoidFileSnapshot } from './editCodeServiceTypes.js';
 import { AnthropicReasoning, RawToolParamsObj } from './sendLLMMessageTypes.js';
 import { ToolCallParams, ToolName, ToolResult } from './toolsServiceTypes.js';
+
+// TODO types
+export type TodoStatus = 'pending' | 'in_progress' | 'completed';
+
+export type TodoItem = {
+	id: string;
+	content: string;
+	status: TodoStatus;
+};
 
 export type ToolMessage<T extends ToolName> = {
 	role: 'tool';
@@ -101,3 +111,38 @@ export type CodespanLocationLink = {
 		endColumn: number,
 	} | undefined
 } | null
+
+// Shared utility functions for TODO list parsing and validation
+export function parseMarkdownChecklist(md: string): TodoItem[] {
+	const lines = md.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+	const todos: TodoItem[] = [];
+
+	for (const line of lines) {
+		const match = line.match(/^(?:-\s*)?\[\s*([ xX\-~])\s*\]\s+(.+)$/);
+		if (!match) continue;
+
+		let status: TodoStatus = 'pending';
+		if (match[1] === 'x' || match[1] === 'X') status = 'completed';
+		else if (match[1] === '-' || match[1] === '~') status = 'in_progress';
+
+		const id = generateUuid();
+		todos.push({ id, content: match[2], status });
+	}
+
+	return todos;
+}
+
+export function validateTodoItems(todos: TodoItem[]): { valid: boolean; error?: string } {
+	if (!Array.isArray(todos)) return { valid: false, error: 'todos must be an array' };
+
+	for (const [i, t] of todos.entries()) {
+		if (!t?.id || typeof t.id !== 'string')
+			return { valid: false, error: `Item ${i + 1} missing id` };
+		if (!t?.content || typeof t.content !== 'string')
+			return { valid: false, error: `Item ${i + 1} missing content` };
+		if (t.status && !['pending', 'in_progress', 'completed'].includes(t.status))
+			return { valid: false, error: `Item ${i + 1} has invalid status` };
+	}
+
+	return { valid: true };
+}

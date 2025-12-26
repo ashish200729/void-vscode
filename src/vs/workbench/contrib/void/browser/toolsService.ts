@@ -9,6 +9,7 @@ import { ISearchService } from '../../../services/search/common/search.js'
 import { IEditCodeService } from './editCodeServiceInterface.js'
 import { ITerminalToolService } from './terminalToolService.js'
 import { LintErrorItem, BuiltinToolCallParams, BuiltinToolResultType, BuiltinToolName } from '../common/toolsServiceTypes.js'
+import { parseMarkdownChecklist, validateTodoItems } from '../common/chatThreadServiceTypes.js'
 import { IVoidModelService } from '../common/voidModelService.js'
 import { EndOfLinePreference } from '../../../../editor/common/model.js'
 import { IVoidCommandBarService } from './voidCommandBarService.js'
@@ -19,6 +20,7 @@ import { RawToolParamsObj } from '../common/sendLLMMessageTypes.js'
 import { MAX_CHILDREN_URIs_PAGE, MAX_FILE_CHARS_PAGE, MAX_TERMINAL_BG_COMMAND_TIME, MAX_TERMINAL_INACTIVE_TIME } from '../common/prompt/prompts.js'
 import { IVoidSettingsService } from '../common/voidSettingsService.js'
 import { generateUuid } from '../../../../base/common/uuid.js'
+import { IMetricsService } from '../common/metricsService.js'
 
 
 // tool use for AI
@@ -158,6 +160,7 @@ export class ToolsService implements IToolsService {
 		@IDirectoryStrService private readonly directoryStrService: IDirectoryStrService,
 		@IMarkerService private readonly markerService: IMarkerService,
 		@IVoidSettingsService private readonly voidSettingsService: IVoidSettingsService,
+		@IMetricsService private readonly _metricsService: IMetricsService,
 	) {
 		const queryBuilder = instantiationService.createInstance(QueryBuilder);
 
@@ -293,6 +296,11 @@ export class ToolsService implements IToolsService {
 				const { persistent_terminal_id: terminalIdUnknown } = params;
 				const persistentTerminalId = validateProposedTerminalId(terminalIdUnknown);
 				return { persistentTerminalId };
+			},
+
+			update_todo_list: (params: RawToolParamsObj): BuiltinToolCallParams['update_todo_list'] => {
+				const todos = validateStr('todos', params.todos);
+				return { todos };
 			},
 
 		}
@@ -528,6 +536,54 @@ export class ToolsService implements IToolsService {
 					this._releaseMutatingLock();
 				}
 			},
+
+		update_todo_list: async (params: BuiltinToolCallParams['update_todo_list']) => {
+			// 1. Input validation
+			if (!params.todos || params.todos.trim() === '') {
+				throw new Error('TODO list cannot be empty');
+			}
+			if (params.todos.length > 10000) {
+				throw new Error('TODO list too long (max 10,000 chars)');
+			}
+
+			// 2. Parse markdown checklist using shared utility
+			const todoItems = parseMarkdownChecklist(params.todos);
+
+		// 3. Count validation
+		if (todoItems.length === 0) {
+			throw new Error('No valid TODO items found. Use format: [ ], [x], or [-]');
+		}
+		if (todoItems.length > 20) {
+			throw new Error('Too many items (max 20). Break into smaller tasks.');
+		}
+
+			// 4. Content length validation
+			for (const [i, item] of todoItems.entries()) {
+				if (item.content.length > 500) {
+					throw new Error(`Item ${i + 1} too long (max 500 chars)`);
+				}
+			}
+
+			// 5. Structure validation
+			const validation = validateTodoItems(todoItems);
+			if (!validation.valid) {
+				throw new Error(validation.error || 'Invalid TODO items');
+			}
+
+			// Capture metrics
+			this._metricsService.capture('Update TODO List', {
+				todosCount: todoItems.length,
+				completedCount: todoItems.filter(t => t.status === 'completed').length,
+			});
+
+			// Store in current thread (handled by chatThreadService)
+			const result = {
+				success: true,
+				todosCount: todoItems.length
+			};
+
+			return { result };
+		},
 		}
 
 
@@ -631,6 +687,10 @@ export class ToolsService implements IToolsService {
 			kill_persistent_terminal: (params, _result) => {
 				return `Successfully closed terminal "${params.persistentTerminalId}".`;
 			},
+
+			update_todo_list: (params, result) => {
+				return `Successfully updated TODO list with ${result.todosCount} items.`;
+			},
 		}
 
 
@@ -666,6 +726,7 @@ export class ToolsService implements IToolsService {
 		if (!lintErrors.length) return { lintErrors: null }
 		return { lintErrors, }
 	}
+
 
 
 }

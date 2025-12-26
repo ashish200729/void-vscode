@@ -35,6 +35,7 @@ import { ToolApprovalTypeSwitch } from '../void-settings-tsx/Settings.js';
 import { persistentTerminalNameOfId } from '../../../terminalToolService.js';
 import { removeMCPToolNamePrefix } from '../../../../common/mcpServiceTypes.js';
 import { TextShimmer } from '../util/TextShimmer.js';
+import { TodoStatusBar } from './TodoStatusBar.js';
 
 
 
@@ -1764,6 +1765,7 @@ const titleOfBuiltinToolName = {
 
 	'read_lint_errors': { done: 'Read errors', proposed: 'Read errors', running: loadingTitleWrapper('Read errors') },
 	'search_in_file': { done: 'Searched file', proposed: 'Search in file', running: loadingTitleWrapper('Searched file') },
+	'update_todo_list': { done: 'Updated TODO list', proposed: 'Update TODO list', running: loadingTitleWrapper('Updated TODO list') },
 
 } as const satisfies Record<BuiltinToolName, { done: any, proposed: any, running: any }>
 
@@ -2005,6 +2007,14 @@ const toolNameToDesc = (toolName: BuiltinToolName, _toolParams: BuiltinToolCallP
 					}
 					return { desc1: '' }
 				},
+				'update_todo_list': () => {
+					const todosStr = rawParams.todos as string | undefined
+					if (todosStr) {
+						const numItems = todosStr.split('\n').filter(Boolean).length
+						return { desc1: `${numItems} items` }
+					}
+					return { desc1: '' }
+				},
 			}
 			try {
 				return x[toolName]?.() || { desc1: '' }
@@ -2109,6 +2119,12 @@ const toolNameToDesc = (toolName: BuiltinToolName, _toolParams: BuiltinToolCallP
 			return {
 				desc1: getBasename(toolParams.uri.fsPath),
 				desc1Info: getRelative(toolParams.uri, accessor),
+			}
+		},
+		'update_todo_list': () => {
+			const toolParams = _toolParams as BuiltinToolCallParams['update_todo_list']
+			return {
+				desc1: `(${toolParams.todos.split('\n').filter(Boolean).length} items)`,
 			}
 		},
 	}
@@ -2605,7 +2621,6 @@ const builtinToolNameToComponent: { [T in BuiltinToolName]: { resultWrapper: Res
 
 			const isError = false
 			const isRejected = toolMessage.type === 'rejected'
-			const { rawParams, params } = toolMessage
 			const componentParams: ToolHeaderParams = {
 				title,
 				desc1,
@@ -3198,6 +3213,40 @@ const builtinToolNameToComponent: { [T in BuiltinToolName]: { resultWrapper: Res
 	// ========================================
 	// ========================================
 
+	'update_todo_list': {
+		resultWrapper: ({ toolMessage }) => {
+			const accessor = useAccessor()
+			const title = getTitle(toolMessage)
+			const { desc1, desc1Info } = toolNameToDesc(toolMessage.name, toolMessage.params, accessor, toolMessage.rawParams)
+			const statusIconMeta = getToolStatusIconMeta(toolMessage)
+
+			if (toolMessage.type === 'tool_request') return null // do not show past requests
+
+			const isError = false
+			const isRejected = toolMessage.type === 'rejected'
+			const { rawParams, params } = toolMessage
+			const componentParams: ToolHeaderParams = {
+				title,
+				desc1,
+				desc1Info,
+				isError,
+				isRejected,
+				icon: statusIconMeta?.icon,
+				iconTooltip: statusIconMeta?.tooltip,
+			}
+
+			if (toolMessage.type === 'tool_error') {
+				const { result } = toolMessage
+				componentParams.desc1 = typeof result === 'string' ? result : String(result)
+				componentParams.isError = true
+			}
+			else if (toolMessage.type === 'running_now') {
+				// Show loading state - no additional children needed, icon already shows spinner
+			}
+
+			return <ToolHeaderWrapper {...componentParams} />
+		},
+	},
 
 
 
@@ -4137,13 +4186,16 @@ export const SidebarChat = () => {
 		/>
 	))
 
+	// Check if current thread has TODOs
+	const hasTodos = (currentThread?.todoList?.length ?? 0) > 0;
+
 	const messagesHTML = <ScrollToBottomContainer
 		key={'messages' + chatThreadsState.currentThreadId} // force rerender on all children if id changes
 		scrollContainerRef={scrollContainerRef}
 		className={`
 			flex flex-col
 			px-4 py-3
-			w-full h-full
+			w-full flex-1 min-h-0
 			overflow-x-hidden
 			overflow-y-auto
 			${previousMessagesHTML.length === 0 && !displayContentSoFar ? 'hidden' : ''}
@@ -4443,6 +4495,7 @@ export const SidebarChat = () => {
 		ref={sidebarRef}
 		className='w-full h-full flex flex-col overflow-hidden'
 	>
+		{hasTodos && <TodoStatusBar todos={currentThread?.todoList || []} />}
 
 		<ErrorBoundary>
 			{messagesHTML}

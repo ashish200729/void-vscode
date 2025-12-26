@@ -20,7 +20,7 @@ import { approvalTypeOfBuiltinToolName, BuiltinToolCallParams, ToolCallParams, T
 import { IToolsService } from './toolsService.js';
 import { CancellationToken } from '../../../../base/common/cancellation.js';
 import { ILanguageFeaturesService } from '../../../../editor/common/services/languageFeatures.js';
-import { ChatMessage, CheckpointEntry, CodespanLocationLink, StagingSelectionItem, ToolMessage } from '../common/chatThreadServiceTypes.js';
+import { ChatMessage, CheckpointEntry, CodespanLocationLink, StagingSelectionItem, TodoItem, TodoStatus, ToolMessage, parseMarkdownChecklist } from '../common/chatThreadServiceTypes.js';
 import { Position } from '../../../../editor/common/core/position.js';
 import { IMetricsService } from '../common/metricsService.js';
 import { shorten } from '../../../../base/common/labels.js';
@@ -118,6 +118,7 @@ export type ThreadType = {
 
 	messages: ChatMessage[];
 	filesWithUserChanges: Set<string>;
+	todoList?: TodoItem[]; // TODO list for this thread
 
 	// this doesn't need to go in a state object, but feels right
 	state: {
@@ -747,6 +748,26 @@ class ChatThreadService extends Disposable implements IChatThreadService {
 
 		// 5. add to history and keep going
 		this._updateLatestTool(threadId, { role: 'tool', type: 'success', params: toolParams, result: toolResult, name: toolName, content: toolResultStr, id: toolId, rawParams: opts.unvalidatedToolParams, mcpServerName })
+
+		// Special handling for update_todo_list tool
+		if (toolName === 'update_todo_list') {
+			const thread = this.state.allThreads[threadId];
+			if (thread) {
+				const todosRaw = (toolParams as BuiltinToolCallParams['update_todo_list']).todos;
+				const todoItems = parseMarkdownChecklist(todosRaw);
+				const newThreads = {
+					...this.state.allThreads,
+					[threadId]: {
+						...thread,
+						todoList: todoItems,
+						lastModified: new Date().toISOString(),
+					}
+				};
+				this._storeAllThreads(newThreads);
+				this._setState({ allThreads: newThreads });
+			}
+		}
+
 		return {}
 	};
 
@@ -2063,6 +2084,33 @@ We only need to do it for files that were edited since `from`, ie files between 
 		const currMessage = this.getCurrentThread()?.messages?.[messageIdx]
 		if (!currMessage || currMessage.role !== 'user') return
 		this._setCurrentMessageState(newState, messageIdx)
+	}
+
+	// TODO list management
+
+	getTodoList(threadId: string): TodoItem[] | undefined {
+		return this.state.allThreads[threadId]?.todoList;
+	}
+
+	updateTodoStatus(threadId: string, todoId: string, status: TodoStatus): void {
+		const thread = this.state.allThreads[threadId];
+		if (!thread?.todoList) return;
+
+		const todoIdx = thread.todoList.findIndex(t => t.id === todoId);
+		if (todoIdx !== -1) {
+			const newTodoList = [...thread.todoList];
+			newTodoList[todoIdx] = { ...newTodoList[todoIdx], status };
+			const newThreads = {
+				...this.state.allThreads,
+				[threadId]: {
+					...thread,
+					todoList: newTodoList,
+					lastModified: new Date().toISOString(),
+				}
+			};
+			this._storeAllThreads(newThreads);
+			this._setState({ allThreads: newThreads });
+		}
 	}
 
 

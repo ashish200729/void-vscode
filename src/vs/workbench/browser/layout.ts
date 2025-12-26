@@ -1646,12 +1646,14 @@ export abstract class Layout extends Disposable implements IWorkbenchLayoutServi
 			position(this.mainContainer, 0, 0, 0, 0, 'relative');
 			size(this.mainContainer, this._mainContainerDimension.width, this._mainContainerDimension.height);
 
-			// Layout the grid widget
-			this.workbenchGrid.layout(this._mainContainerDimension.width, this._mainContainerDimension.height);
-			this.initialized = true;
+			// Layout the grid widget (only if grid is initialized)
+			if (this.workbenchGrid) {
+				this.workbenchGrid.layout(this._mainContainerDimension.width, this._mainContainerDimension.height);
+				this.initialized = true;
 
-			// Emit as event
-			this.handleContainerDidLayout(this.mainContainer, this._mainContainerDimension);
+				// Emit as event
+				this.handleContainerDidLayout(this.mainContainer, this._mainContainerDimension);
+			}
 		}
 	}
 

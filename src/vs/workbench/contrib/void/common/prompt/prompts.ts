@@ -642,6 +642,48 @@ In all other cases, combine all edits to the same file into one \`edit_file\` ca
 	</kill_persistent_terminal>`,
 	},
 
+	update_todo_list: {
+		name: 'update_todo_list',
+		description: `Replace the entire TODO list with an updated checklist. Always provide the full list.
+
+**Checklist Format:**
+- Use a single-level markdown checklist (no nesting)
+- Every item MUST start with exactly one of:
+  - \`- [ ] \` (pending)
+  - \`- [x] \` (completed)
+  - \`- [-] \` (in progress)
+- Keep each task short, specific, and action-oriented (start with a verb)
+- Keep the list small (aim 3-10 items; avoid > 12)
+- Exactly ONE item may be \`- [-]\` at a time
+
+**Core Principles:**
+- The tool state is replaced wholesale: include everything you want visible in the TODO panel
+- Create a TODO list only when it helps (multi-step work); avoid spamming it for trivial tasks
+- Mark items completed immediately after finishing them
+- Add new items only when they materially affect the plan
+- Avoid meta tasks (searching, linting, running commands); track user-facing milestones instead
+
+**Example:**
+- [x] Analyze requirements
+- [-] Implement core logic
+- [ ] Write tests
+- [ ] Update documentation
+
+**When to Use:**
+- Complex multi-step tasks
+- Need ongoing progress tracking
+- New items discovered during work
+
+**When NOT to Use:**
+- Single trivial tasks
+- Purely conversational requests`,
+		params: {
+			todos: {
+				description: 'Markdown checklist string; each line starts with `- [ ] `, `- [x] `, or `- [-] `'
+			}
+		}
+	},
+
 } satisfies { [T in keyof BuiltinToolResultType]: InternalToolInfo }
 
 export const builtinToolNames = Object.keys(builtinTools) as BuiltinToolName[]
@@ -918,6 +960,36 @@ Your main goal is to follow the USER's instructions at each message.
 	  `)
 					: '';
 
+	const todoManagement = mode === 'agent' || mode === 'gather'
+		? (`
+<todo_management>
+If the \`update_todo_list\` tool is available, use it to keep a lightweight, high-signal checklist of user-facing milestones.
+
+**When to Use:**
+- 3+ distinct user-facing steps
+- Multi-part user requests
+- Long-running work where progress tracking helps
+- New requirements discovered that materially change the plan
+
+**When NOT to Use:**
+- Single-step or trivial tasks
+- Purely conversational/informational requests
+- Operational work done in service of another task (searching, linting, testing, running commands)
+
+**Rules:**
+- The tool replaces the whole list: always send the complete list you want visible
+- Exactly ONE \`- [-]\` item at a time
+- Keep 3-10 items; avoid > 12
+- No nesting, no prose, no blank lines - just checklist items
+- Prefer concrete verbs and outcomes (e.g., "Add X", "Fix Y", "Verify Z")
+
+**Example:**
+- [x] Identify failing test suite
+- [-] Fix prompt instructions for TODO tool usage
+- [ ] Validate tool calls and formatting
+</todo_management>
+`)
+		: '';
 
 	const communication = (`
 <communication>
@@ -997,6 +1069,8 @@ Read multiple files as needed; don't guess.
 
 Give a brief progress note before the first tool call each turn; add another before any new batch and before ending your turn.
 </tool_calling>
+
+${todoManagement}
 
 <context_understanding>
 Search tools (search_for_files, search_in_file) are your MAIN exploration tools.
