@@ -3920,6 +3920,10 @@ export const SidebarChat = () => {
 	const chatThreadsService = accessor.get('IChatThreadService')
 
 	const settingsState = useSettingsState()
+
+	// Agent sidebar toggle state
+	const [showAgentSidebar, setShowAgentSidebar] = useState(false)
+
 	// ----- HIGHER STATE -----
 
 	// threads state
@@ -4512,8 +4516,27 @@ export const SidebarChat = () => {
 	return (
 		<Fragment key={threadId} // force rerender when change thread
 		>
-			{/* Multi-agent status bar */}
-			<AgentStatusBar />
+			{/* Multi-agent status bar with toggle */}
+			<AgentStatusBar
+				isVisible={showAgentSidebar}
+				onToggle={() => setShowAgentSidebar(!showAgentSidebar)}
+			/>
+
+			{/* Toggle button for agent sidebar */}
+			{!showAgentSidebar && (
+				<div className="px-4 py-2 border-b border-void-border-3">
+					<button
+						onClick={() => setShowAgentSidebar(true)}
+						className="w-full flex items-center justify-between px-2 py-1.5 text-xs text-void-fg-3 hover:text-void-fg-2 hover:bg-void-bg-2 rounded transition-all duration-200"
+						data-tooltip-id='void-tooltip'
+						data-tooltip-content='Show agent panel'
+						data-tooltip-place='right'
+					>
+						<span>Agents</span>
+						<ChevronRight size={14} />
+					</button>
+				</div>
+			)}
 
 			{isLandingPage ?
 				landingPageContent
