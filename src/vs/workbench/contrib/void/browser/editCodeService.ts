@@ -163,6 +163,9 @@ class EditCodeService extends Disposable implements IEditCodeService {
 	diffAreaOfId: Record<string, DiffArea> = {}; // diffareaId -> diffArea
 	diffOfId: Record<string, Diff> = {}; // diffid -> diff (redundant with diffArea._diffOfId)
 
+	// Multi-agent support: track which agent created which diff
+	private diffAgentMap: Map<string, string> = new Map(); // diffId -> agentId
+
 	// events
 
 	// uri: diffZones  // listen on change diffZones
@@ -2085,7 +2088,7 @@ class EditCodeService extends Disposable implements IEditCodeService {
 
 
 	// remove a batch of diffareas all at once (and handle accept/reject of their diffs)
-	public acceptOrRejectAllDiffAreas: IEditCodeService['acceptOrRejectAllDiffAreas'] = async ({ uri, behavior, removeCtrlKs, _addToHistory }) => {
+	public acceptOrRejectAllDiffAreas: IEditCodeService['acceptOrRejectAllDiffAreas'] = async ({ uri, behavior, removeCtrlKs, _addToHistory, agentId }) => {
 
 		const diffareaids = this.diffAreasOfURI[uri.fsPath]
 		if ((diffareaids?.size ?? 0) === 0) return // do nothing
@@ -2097,11 +2100,33 @@ class EditCodeService extends Disposable implements IEditCodeService {
 			if (!diffArea) continue
 
 			if (diffArea.type === 'DiffZone') {
-				if (behavior === 'reject') {
-					this._revertDiffZone(diffArea)
-					this._deleteDiffZone(diffArea)
+				// If agentId is specified, only process diffs from that agent
+				if (agentId) {
+					const diffIds = Object.keys(diffArea._diffOfId);
+					const agentDiffIds = diffIds.filter(id => this.getDiffAgent(id) === agentId);
+
+					// Skip this diff area if it has no diffs from the specified agent
+					if (agentDiffIds.length === 0) continue;
+
+					// Process only the agent's diffs
+					for (const diffId of agentDiffIds) {
+						const diff = diffArea._diffOfId[diffId];
+						if (!diff) continue;
+
+						if (behavior === 'reject') {
+							await this.rejectDiff({ diffid: parseInt(diffId) });
+						} else if (behavior === 'accept') {
+							await this.acceptDiff({ diffid: parseInt(diffId) });
+						}
+					}
+				} else {
+					// Original behavior: process all diffs
+					if (behavior === 'reject') {
+						this._revertDiffZone(diffArea)
+						this._deleteDiffZone(diffArea)
+					}
+					else if (behavior === 'accept') this._deleteDiffZone(diffArea)
 				}
-				else if (behavior === 'accept') this._deleteDiffZone(diffArea)
 			}
 			else if (diffArea.type === 'CtrlKZone' && removeCtrlKs) {
 				this._deleteCtrlKZone(diffArea)
@@ -2110,6 +2135,37 @@ class EditCodeService extends Disposable implements IEditCodeService {
 
 		this._refreshStylesAndDiffsInURI(uri)
 		onFinishEdit()
+	}
+
+	// Multi-agent support methods
+	public setDiffAgent(diffId: string, agentId: string): void {
+		this.diffAgentMap.set(diffId, agentId);
+	}
+
+	public getDiffAgent(diffId: string): string | undefined {
+		return this.diffAgentMap.get(diffId);
+	}
+
+	public getDiffsByAgent(agentId: string, uri?: URI): Diff[] {
+		const diffs: Diff[] = [];
+
+		for (const diffId in this.diffOfId) {
+			const diff = this.diffOfId[diffId];
+			if (!diff) continue;
+
+			// Filter by agent
+			if (this.getDiffAgent(diffId) !== agentId) continue;
+
+			// Filter by URI if specified
+			if (uri) {
+				const diffArea = this.diffAreaOfId[diff.diffareaid];
+				if (!diffArea || diffArea._URI.fsPath !== uri.fsPath) continue;
+			}
+
+			diffs.push(diff);
+		}
+
+		return diffs;
 	}
 
 

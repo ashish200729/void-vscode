@@ -54,6 +54,8 @@ import { IExtensionManagementService } from '../../../../../../../platform/exten
 import { IMCPService } from '../../../../common/mcpService.js';
 import { IStorageService, StorageScope } from '../../../../../../../platform/storage/common/storage.js'
 import { OPT_OUT_KEY } from '../../../../common/storageKeys.js'
+import { IAgentRegistryService } from '../../../agentRegistryService.js';
+import { IConflictDetectionService } from '../../../conflictDetectionService.js';
 
 
 // normally to do this you'd use a useEffect that calls .onDidChangeState(), but useEffect mounts too late and misses initial state changes
@@ -229,6 +231,10 @@ const getReactAccessor = (accessor: ServicesAccessor) => {
 		IMCPService: accessor.get(IMCPService),
 
 		IStorageService: accessor.get(IStorageService),
+
+		// Multi-agent services
+		IAgentRegistryService: accessor.get(IAgentRegistryService),
+		IConflictDetectionService: accessor.get(IConflictDetectionService),
 
 	} as const
 	return reactAccessor

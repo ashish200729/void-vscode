@@ -55,9 +55,14 @@ export interface IEditCodeService {
 	diffAreasOfURI: Record<string, Set<string> | undefined>;
 	diffOfId: Record<string, Diff>;
 
-	acceptOrRejectAllDiffAreas(opts: { uri: URI, removeCtrlKs: boolean, behavior: 'reject' | 'accept', _addToHistory?: boolean }): void;
+	acceptOrRejectAllDiffAreas(opts: { uri: URI, removeCtrlKs: boolean, behavior: 'reject' | 'accept', _addToHistory?: boolean, agentId?: string }): void;
 	acceptDiff({ diffid }: { diffid: number }): void;
 	rejectDiff({ diffid }: { diffid: number }): void;
+
+	// Multi-agent support
+	setDiffAgent(diffId: string, agentId: string): void;
+	getDiffAgent(diffId: string): string | undefined;
+	getDiffsByAgent(agentId: string, uri?: URI): Diff[];
 
 	// events
 	onDidAddOrDeleteDiffZones: Event<{ uri: URI }>;

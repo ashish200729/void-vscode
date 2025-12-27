@@ -133,6 +133,12 @@ export type ThreadType = {
 			}
 		}
 
+		// Multi-agent support
+		agentMetadata?: {
+			agentId: string;
+			agentName: string;
+			taskDescription: string;
+		};
 
 		mountedInfo?: {
 			whenMounted: Promise<WhenMounted>
@@ -220,6 +226,7 @@ const newThreadObject = () => {
 			stagingSelections: [],
 			focusedMessageIdx: undefined,
 			linksOfMessageIdx: {},
+			agentMetadata: undefined,
 		},
 		filesWithUserChanges: new Set()
 	} satisfies ThreadType
@@ -242,6 +249,10 @@ export interface IChatThreadService {
 	getCurrentThread(): ThreadType;
 	openNewThread(): void;
 	switchToThread(threadId: string): void;
+
+	// Multi-agent support
+	createAgentThread(agentName: string, taskDescription: string): string;
+	getAgentIdForThread(threadId: string): string | undefined;
 
 	// thread selector
 	deleteThread(threadId: string): void;
@@ -2114,6 +2125,40 @@ We only need to do it for files that were edited since `from`, ie files between 
 	}
 
 
+
+	// Multi-agent support methods
+	createAgentThread(agentName: string, taskDescription: string): string {
+		const agentId = `agent-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+
+		// Create new thread
+		const newThread = newThreadObject();
+		const threadId = newThread.id;
+
+		// Update state with agent metadata
+		const newThreads: ChatThreads = {
+			...this.state.allThreads,
+			[threadId]: {
+				...newThread,
+				state: {
+					...newThread.state,
+					agentMetadata: {
+						agentId,
+						agentName,
+						taskDescription
+					}
+				}
+			}
+		};
+		this._storeAllThreads(newThreads);
+		this._setState({ allThreads: newThreads, currentThreadId: threadId });
+
+		return threadId;
+	}
+
+	getAgentIdForThread(threadId: string): string | undefined {
+		const thread = this.state.allThreads[threadId];
+		return thread?.state?.agentMetadata?.agentId;
+	}
 
 }
 

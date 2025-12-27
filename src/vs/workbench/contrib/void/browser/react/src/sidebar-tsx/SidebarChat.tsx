@@ -36,6 +36,8 @@ import { persistentTerminalNameOfId } from '../../../terminalToolService.js';
 import { removeMCPToolNamePrefix } from '../../../../common/mcpServiceTypes.js';
 import { TextShimmer } from '../util/TextShimmer.js';
 import { TodoStatusBar } from './TodoStatusBar.js';
+import { AgentStatusBar } from './AgentStatusBar.js';
+import { ConflictNotifications } from './ConflictResolutionModal.js';
 
 
 
@@ -1062,7 +1064,8 @@ const EditTool = ({ toolMessage, threadId, messageIdx, content }: Parameters<Res
 		}
 		// Handle tool errors
 		else if (toolMessage.type === 'tool_error') {
-			componentParams.desc1 = typeof toolMessage.result === 'string' ? toolMessage.result : String(toolMessage.result)
+			const result = (toolMessage as any).result
+			componentParams.desc1 = typeof result === 'string' ? result : String(result)
 			componentParams.isError = true
 		}
 	}
@@ -2643,7 +2646,7 @@ const builtinToolNameToComponent: { [T in BuiltinToolName]: { resultWrapper: Res
 			}
 
 			if (toolMessage.type === 'success') {
-				const { result } = toolMessage
+				const { result, params } = toolMessage
 				componentParams.onClick = () => { voidOpenFileFn(params.uri, accessor, range) }
 				if (result.hasNextPage && params.pageNumber === 1)  // first page
 					componentParams.desc2 = `(truncated after ${Math.round(MAX_FILE_CHARS_PAGE) / 1000}k)`
@@ -4509,9 +4512,15 @@ export const SidebarChat = () => {
 	return (
 		<Fragment key={threadId} // force rerender when change thread
 		>
+			{/* Multi-agent status bar */}
+			<AgentStatusBar />
+
 			{isLandingPage ?
 				landingPageContent
 				: threadPageContent}
+
+			{/* Conflict resolution modal */}
+			<ConflictNotifications />
 		</Fragment>
 	)
 }
